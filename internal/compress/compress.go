@@ -49,7 +49,7 @@ const savingsFloor = 0.9 // require out <= in*floor to accept the mutation
 func mustKeep(line string) bool {
 	u := strings.ToUpper(line)
 	for _, pat := range []string{
-		"--- FAIL", "FAIL:", "PANIC:", "FATAL", "ERROR", "EXCEPTION",
+		"--- FAIL", "FAIL:", "FAILED ", "PANIC:", "FATAL", "ERROR", "EXCEPTION",
 		"ASSERTIONERROR", "TRACEBACK", "BUILD FAILED", "✗",
 	} {
 		if strings.Contains(u, pat) {
