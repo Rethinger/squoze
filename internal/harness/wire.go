@@ -10,6 +10,7 @@ package harness
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -39,9 +40,44 @@ func OpenCodeConfigPath(home string) (string, bool) {
 	return json, false
 }
 
+// stripBOM removes a UTF-8 BOM that Windows editors (PowerShell 5.1
+// Set-Content -Encoding UTF8) prepend, breaking strict JSON parsing.
+func stripBOM(b []byte) []byte {
+	if len(b) >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
+		return b[3:]
+	}
+	return b
+}
+
+// OpenCodeProviderIDs lists provider IDs present in the home config, so the
+// CLI can wire the one the user actually uses (not just "anthropic").
+func OpenCodeProviderIDs(home string) []string {
+	path, ok := OpenCodeConfigPath(home)
+	if !ok {
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || filepath.Ext(path) == ".jsonc" {
+		return nil
+	}
+	var root struct {
+		Provider map[string]json.RawMessage `json:"provider"`
+	}
+	if json.Unmarshal(stripBOM(raw), &root) != nil {
+		return nil
+	}
+	out := make([]string, 0, len(root.Provider))
+	for id := range root.Provider {
+		out = append(out, id)
+	}
+	sortStrings(out)
+	return out
+}
+
 // WireOpenCode points providerID's built-in provider entry at addr inside
 // the home directory's opencode config. Creates the file when missing.
-// Returns the path and whether content changed.
+// The original baseURL's path suffix (e.g. "/v1", "/api") is preserved —
+// only the host:port is redirected. Returns the path and whether changed.
 func WireOpenCode(home, providerID, addr string) (string, bool, error) {
 	path, existed := OpenCodeConfigPath(home)
 	data := []byte("{}")
@@ -54,7 +90,7 @@ func WireOpenCode(home, providerID, addr string) (string, bool, error) {
 			return path, false, fmt.Errorf("%s contains comments or non-strict JSON; edit manually:\n%s", path, OpenCodeSnippet(providerID, addr))
 		}
 		if len(strings.TrimSpace(string(raw))) > 0 {
-			data = raw
+			data = stripBOM(raw)
 		}
 	}
 	if err := backupOnce(path, data, existed); err != nil {
@@ -80,9 +116,16 @@ func WireOpenCode(home, providerID, addr string) (string, bool, error) {
 		opts = map[string]any{}
 		entry["options"] = opts
 	}
-	prev := opts["baseURL"]
-	next := "http://" + addr
-	if prev == next {
+	// Preserve the original endpoint's path: providers behind path prefixes
+	// (e.g. ".../v1", ".../api") break when only the host is redirected.
+	suffix := ""
+	if prevURL, ok := opts["baseURL"].(string); ok && prevURL != "" {
+		if pu, perr := url.Parse(prevURL); perr == nil && pu.Path != "" && pu.Path != "/" {
+			suffix = pu.Path
+		}
+	}
+	next := "http://" + addr + suffix
+	if opts["baseURL"] == next {
 		return path, false, nil // already wired
 	}
 	opts["baseURL"] = next

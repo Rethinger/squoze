@@ -42,6 +42,7 @@ func runAgent(args []string) int {
 	listen := fs.String("listen", "", "wrap-mode listen address (default ephemeral)")
 	auto := fs.Bool("auto", false, "opencode/omp: edit the agent's config file automatically (backup first)")
 	unwire := fs.Bool("unwire", false, "opencode/omp: restore the config from the pre-wire backup and exit")
+	provider := fs.String("provider", "", "opencode/omp: which provider entry to reroute (default: auto-detect)")
 	fs.Parse(args[1:])
 
 	a, aerr := harness.LookupAgent(name)
@@ -111,18 +112,34 @@ func runAgent(args []string) int {
 
 	switch a.Kind {
 	case "opencode":
+		// Which provider to reroute: --provider wins; else auto-detect the
+		// first provider with an entry in the user's config (the live-test
+		// lesson: wiring "anthropic" misses agents whose model rides a
+		// custom provider, leaving sq.jsonl empty).
+		provID := *provider
+		if provID == "" {
+			ids := harness.OpenCodeProviderIDs(homeDir())
+			if len(ids) == 0 {
+				ids = []string{"anthropic"}
+			}
+			provID = ids[0]
+			if len(ids) > 1 {
+				fmt.Printf("multiple providers found: %s — wiring %q (pick with --provider)\n",
+					strings.Join(ids, ", "), provID)
+			}
+		}
 		if *auto {
-			path, changed, werr := harness.WireOpenCode(homeDir(), "anthropic", localAddr)
+			path, changed, werr := harness.WireOpenCode(homeDir(), provID, localAddr)
 			if werr != nil {
 				fmt.Fprintf(os.Stderr, "auto-wire failed (%s):\n%v\nFalling back to manual snippet.\n", path, werr)
 			} else {
-				fmt.Printf("config wired automatically: %s (changed=%v; backup at %s.squoze-bak)\n",
-					path, changed, path)
+				fmt.Printf("config wired automatically: provider %q → %s (changed=%v; backup at %s.squoze-bak)\n",
+					provID, localAddr, changed, path)
 				break
 			}
 		}
-		fmt.Println("Add to ~/.config/opencode/opencode.json (override your provider):")
-		fmt.Println(harness.OpenCodeSnippet("anthropic", localAddr))
+		fmt.Printf("Add to ~/.config/opencode/opencode.json (override your provider, e.g. %q):\n", provID)
+		fmt.Println(harness.OpenCodeSnippet(provID, localAddr))
 		fmt.Println("\nThen just start opencode as usual. Auth headers pass through squoze untouched.")
 	case "omp":
 		if *auto {
