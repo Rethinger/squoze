@@ -1,0 +1,12 @@
+# Binaries
+/squoze
+/squoze.exe
+/dist/
+
+# Test artifacts
+*.out
+coverage.txt
+
+# Local data (never commit user originals)
+/originals.jsonl
+/data/

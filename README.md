@@ -7,12 +7,13 @@ between your AI agent and any OpenAI/Anthropic-compatible provider and shrinks
 request bodies — without losing information the model needs, and without
 breaking provider prompt caches.
 
-**Status: experimental, MVP step 5 of 8.** squoze detects the wire format,
-classifies content blocks and squeezes verbose machine output (test runs,
-logs) with head/tail elision that never drops error lines. Measured on a
-270KB go-test blob: **98.9% byte savings** while keeping every `--- FAIL`
-line and a stable marker for provider prompt caches. Compression presets
-adapt per model family, and every elision is locally reversible by ref.
+**Status: experimental, v0.1.0 (MVP steps 1–5 shipped).** squoze detects the
+wire format, classifies content blocks and squeezes verbose machine output
+(test runs, logs) with head/tail elision that never drops error lines.
+Measured on a 270KB go-test blob: **98.9% byte savings** while keeping every
+`--- FAIL` line and a stable marker for provider prompt caches. Compression
+presets adapt per model family, and every elision is locally reversible by
+ref.
 
 ## Why
 
@@ -47,7 +48,8 @@ Every response carries `X-Squoze-Original-Bytes`, `X-Squoze-Sent-Bytes` and
 
 ```sh
 go build ./...
-go test ./...
+go test ./...            # unit + quality contracts
+go test ./internal/eval -v   # was→is savings table
 ```
 
-Apache-2.0.
+Apache-2.0. See `docs/eval-protocol.md` for the full evaluation strategy.
