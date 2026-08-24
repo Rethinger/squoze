@@ -73,18 +73,24 @@ func TestProxyFailOpenOnInvalidJSONStillForwards(t *testing.T) {
 }
 
 func TestSafeProcessSurvivesEnginePanic(t *testing.T) {
-	orig := processFn
-	processFn = func(b []byte) ([]byte, engine.Result) {
-		panic("boom")
-	}
-	defer func() { processFn = orig }()
+	s := NewWithEngine(mustURL(t, "http://upstream.test"), nil)
+	s.apply = func([]byte) ([]byte, engine.Result) { panic("boom") }
 
 	body := []byte(`{"anything":true}`)
-	got, res := safeProcess(body)
+	got, res := s.safeProcess(body)
 	if !bytes.Equal(got, body) {
 		t.Fatalf("panic must degrade to pass-through, got %q", got)
 	}
 	if res.SentBytes != len(body) || len(res.Transforms) != 0 {
 		t.Fatalf("metadata wrong after recovery: %+v", res)
 	}
+}
+
+func mustURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
 }

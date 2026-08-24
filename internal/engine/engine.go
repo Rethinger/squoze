@@ -58,6 +58,9 @@ func NewEngineWith(memoCapacity int, orig *store.Originals) *Engine {
 	return &Engine{memo: store.NewMemo(memoCapacity), orig: orig}
 }
 
+// Default returns the package-level shared engine.
+func Default() *Engine { return defaultEngine }
+
 // Process runs the default engine over a request body.
 func Process(body []byte) ([]byte, Result) {
 	return defaultEngine.Apply(body)

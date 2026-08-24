@@ -7,11 +7,12 @@ between your AI agent and any OpenAI/Anthropic-compatible provider and shrinks
 request bodies — without losing information the model needs, and without
 breaking provider prompt caches.
 
-**Status: experimental, MVP step 2 of 8.** squoze detects the wire format,
+**Status: experimental, MVP step 5 of 8.** squoze detects the wire format,
 classifies content blocks and squeezes verbose machine output (test runs,
 logs) with head/tail elision that never drops error lines. Measured on a
 270KB go-test blob: **98.9% byte savings** while keeping every `--- FAIL`
-line and a stable marker for provider prompt caches.
+line and a stable marker for provider prompt caches. Compression presets
+adapt per model family, and every elision is locally reversible by ref.
 
 ## Why
 
@@ -31,6 +32,12 @@ deterministically, with quality contracts:
 # Drop-in proxy for any OpenAI/Anthropic-compatible client
 squoze proxy --port 8787 --upstream https://api.anthropic.com
 ANTHROPIC_BASE_URL=http://localhost:8787 claude
+
+# Or zero-config: wrap the agent, env injection does the rest
+squoze wrap --upstream https://api.anthropic.com claude
+
+# Resolve an elision marker ref back to the full original text
+squoze retrieve a3f9c2e1b4d0
 ```
 
 Every response carries `X-Squoze-Original-Bytes`, `X-Squoze-Sent-Bytes` and

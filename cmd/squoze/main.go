@@ -1,11 +1,12 @@
 // Command squoze is the universal, deterministic LLM context optimizer.
 //
 //	squoze proxy  --port 8787 --upstream https://api.anthropic.com
-//	squoze wrap   <agent command>
+//	squoze wrap   --upstream URL <agent command>
 //	squoze version
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/Rethinger/squoze/internal/engine"
 	"github.com/Rethinger/squoze/internal/proxy"
 	"github.com/Rethinger/squoze/internal/store"
+	"github.com/Rethinger/squoze/internal/wrap"
 )
 
 func main() {
@@ -28,6 +30,7 @@ func main() {
 		fs := flag.NewFlagSet("proxy", flag.ExitOnError)
 		port := fs.Int("port", 8787, "listen port")
 		upstream := fs.String("upstream", "", "upstream base URL (required)")
+		originsDir := fs.String("origins-dir", "", "persist squeezed originals here (default: memory only)")
 		fs.Parse(os.Args[2:])
 		if *upstream == "" {
 			fmt.Fprintln(os.Stderr, "squoze proxy: --upstream is required")
@@ -38,10 +41,46 @@ func main() {
 			fmt.Fprintf(os.Stderr, "squoze proxy: bad --upstream: %v\n", err)
 			os.Exit(2)
 		}
+		var handler http.Handler
+		if *originsDir != "" {
+			orig, oerr := store.OpenOriginals(*originsDir)
+			if oerr != nil {
+				fmt.Fprintf(os.Stderr, "squoze proxy: origins store: %v\n", oerr)
+				os.Exit(1)
+			}
+			handler = proxy.NewWithEngine(u, engine.NewEngineWith(engine.DefaultMemoCapacity, orig))
+		} else {
+			handler = proxy.New(u)
+		}
 		addr := fmt.Sprintf(":%d", *port)
 		fmt.Printf("squoze v%s: proxying :%d → %s\n", engine.Version, *port, u)
-		if err := http.ListenAndServe(addr, proxy.New(u)); err != nil {
+		if err := http.ListenAndServe(addr, handler); err != nil {
 			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "wrap":
+		fs := flag.NewFlagSet("wrap", flag.ExitOnError)
+		upstream := fs.String("upstream", "", "upstream base URL (required)")
+		originsDir := fs.String("origins-dir", "", "persist squeezed originals here (default: memory only)")
+		addr := fs.String("listen", "", "proxy listen address (default 127.0.0.1 ephemeral)")
+		fs.Parse(os.Args[2:])
+		if *upstream == "" || fs.NArg() == 0 {
+			fmt.Fprintln(os.Stderr, "usage: squoze wrap --upstream URL CMD [args...]")
+			os.Exit(2)
+		}
+		u, err := url.Parse(*upstream)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "squoze wrap: bad --upstream: %v\n", err)
+			os.Exit(2)
+		}
+		werr := wrap.Run(context.Background(), wrap.Options{
+			Command:    fs.Args(),
+			Upstream:   u,
+			OriginsDir: *originsDir,
+			ListenAddr: *addr,
+		})
+		if werr != nil {
+			fmt.Fprintln(os.Stderr, werr)
 			os.Exit(1)
 		}
 	case "version":
@@ -71,9 +110,6 @@ func main() {
 			os.Exit(1)
 		}
 		os.Stdout.WriteString(text)
-	case "wrap":
-		fmt.Fprintln(os.Stderr, "squoze wrap: not implemented yet (MVP step 7)")
-		os.Exit(2)
 	default:
 		usage()
 		os.Exit(2)
