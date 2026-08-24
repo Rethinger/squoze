@@ -15,15 +15,18 @@ type Agent struct {
 	Preset string
 	// Launch is the typical command that starts the agent.
 	Launch string
+	// Kind selects the wiring strategy: env agents get base-URL injection,
+	// config agents get their config file patched automatically.
+	Kind string // "env" | "opencode" | "omp"
 }
 
 var agents = map[string]*Agent{
-	"claude-code": {Name: "claude-code", Aliases: []string{"claude", "cc"}, Preset: "claude", Launch: "claude"},
-	"codex":       {Name: "codex", Aliases: []string{"openai-codex"}, Preset: "openai", Launch: "codex"},
-	"gemini-cli":  {Name: "gemini-cli", Aliases: []string{"gemini"}, Preset: "gemini", Launch: "gemini"},
-	"dsh":         {Name: "dsh", Aliases: []string{"deepseek-harness"}, Preset: "deepseek", Launch: "dsh"},
-	"opencode":    {Name: "opencode", Aliases: []string{"oc"}, Preset: "", Launch: "opencode"},
-	"omp":         {Name: "oh-my-pi", Aliases: []string{"omp"}, Preset: "", Launch: "omp"},
+	"claude-code": {Name: "claude-code", Aliases: []string{"claude", "cc"}, Preset: "claude", Launch: "claude", Kind: "env"},
+	"codex":       {Name: "codex", Aliases: []string{"openai-codex"}, Preset: "openai", Launch: "codex", Kind: "env"},
+	"gemini-cli":  {Name: "gemini-cli", Aliases: []string{"gemini"}, Preset: "gemini", Launch: "gemini", Kind: "env"},
+	"dsh":         {Name: "dsh", Aliases: []string{"deepseek-harness"}, Preset: "deepseek", Launch: "dsh", Kind: "env"},
+	"opencode":    {Name: "opencode", Aliases: []string{"oc"}, Launch: "opencode", Kind: "opencode"},
+	"omp":         {Name: "oh-my-pi", Aliases: []string{"omp"}, Launch: "omp", Kind: "omp"},
 }
 
 // LookupAgent resolves an agent by name or alias.

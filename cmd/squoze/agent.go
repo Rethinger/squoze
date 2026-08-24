@@ -40,6 +40,8 @@ func runAgent(args []string) int {
 	logFile := fs.String("log", "", "full JSONL request log path")
 	originsDir := fs.String("origins-dir", "", "persist squeezed originals")
 	listen := fs.String("listen", "", "wrap-mode listen address (default ephemeral)")
+	auto := fs.Bool("auto", false, "opencode/omp: edit the agent's config file automatically (backup first)")
+	unwire := fs.Bool("unwire", false, "opencode/omp: restore the config from the pre-wire backup and exit")
 	fs.Parse(args[1:])
 
 	a, aerr := harness.LookupAgent(name)
@@ -91,12 +93,48 @@ func runAgent(args []string) int {
 	localAddr := fmt.Sprintf("localhost:%d", *port)
 	fmt.Printf("squoze v%s: proxy for %s → %s on %s\n\n", engine.Version, a.Name, u, localAddr)
 
-	switch a.Name {
+	// Unwire exits immediately: restore the backup, never start a server.
+	if *unwire {
+		if a.Kind == "opencode" {
+			path, restored, err := harness.UnwireOpenCode(homeDir())
+			fmt.Printf("unwire %s: restored=%v err=%v\n", path, restored, err)
+			return 0
+		}
+		if a.Kind == "omp" {
+			path, restored, err := harness.UnwireOMP(homeDir())
+			fmt.Printf("unwire %s: restored=%v err=%v\n", path, restored, err)
+			return 0
+		}
+		fmt.Printf("agent %s is env-driven: nothing to unwire (just unset its base-URL variable)\n", a.Name)
+		return 0
+	}
+
+	switch a.Kind {
 	case "opencode":
+		if *auto {
+			path, changed, werr := harness.WireOpenCode(homeDir(), "anthropic", localAddr)
+			if werr != nil {
+				fmt.Fprintf(os.Stderr, "auto-wire failed (%s):\n%v\nFalling back to manual snippet.\n", path, werr)
+			} else {
+				fmt.Printf("config wired automatically: %s (changed=%v; backup at %s.squoze-bak)\n",
+					path, changed, path)
+				break
+			}
+		}
 		fmt.Println("Add to ~/.config/opencode/opencode.json (override your provider):")
 		fmt.Println(harness.OpenCodeSnippet("anthropic", localAddr))
 		fmt.Println("\nThen just start opencode as usual. Auth headers pass through squoze untouched.")
 	case "omp":
+		if *auto {
+			path, changed, werr := harness.WireOMP(homeDir(), "anthropic", localAddr, "ANTHROPIC_API_KEY")
+			if werr != nil {
+				fmt.Fprintf(os.Stderr, "auto-wire failed (%s):\n%v\nFalling back to manual snippet.\n", path, werr)
+			} else {
+				fmt.Printf("models.yml wired automatically: %s (changed=%v; backup at %s.squoze-bak)\n",
+					path, changed, path)
+				break
+			}
+		}
 		fmt.Println("Add to ~/.omp/agent/models.yml (route catalog provider through squoze):")
 		fmt.Println(harness.OMPSnippet("anthropic", localAddr, "ANTHROPIC_API_KEY"))
 		fmt.Println("\nVerify with `omp models anthropic`, then start omp as usual.")
@@ -114,6 +152,15 @@ func runAgent(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func homeDir() string {
+	h, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "squoze: cannot resolve home dir:", err)
+		os.Exit(1)
+	}
+	return h
 }
 
 func buildProxyHandler(originsDir, logFile string, u *url.URL) (*proxy.Server, func()) {
