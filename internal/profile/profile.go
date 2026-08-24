@@ -39,15 +39,15 @@ func (f Family) String() string {
 var presets = map[Family]compress.Params{
 	// Conservative: Anthropic prompt-cache discounts are among the best;
 	// breaking a prefix costs more than the bytes saved.
-	Claude: {MinBytes: 4096, HeadLines: 30, TailLines: 30, MaxKept: 50,
+	Claude: {MinBytes: 4096, HeadLines: 30, TailLines: 30, MaxKept: 50, ContextAfter: 2,
 		Marker: "[... squoze: %d middle lines elided · full text kept locally as %s ...]"},
 	// Balanced default.
-	Generic: {MinBytes: 2048, HeadLines: 20, TailLines: 20, MaxKept: 50,
+	Generic: {MinBytes: 2048, HeadLines: 20, TailLines: 20, MaxKept: 50, ContextAfter: 2,
 		Marker: "[... squoze: %d middle lines elided · full text kept locally as %s ...]"},
-	GPT: {MinBytes: 2048, HeadLines: 20, TailLines: 20, MaxKept: 50,
+	GPT: {MinBytes: 2048, HeadLines: 20, TailLines: 20, MaxKept: 50, ContextAfter: 2,
 		Marker: "[... squoze: %d middle lines elided · full text kept locally as %s ...]"},
 	// Aggressive: no cheap stable prompt cache to protect historically.
-	DeepSeek: {MinBytes: 1024, HeadLines: 12, TailLines: 12, MaxKept: 50,
+	DeepSeek: {MinBytes: 1024, HeadLines: 12, TailLines: 12, MaxKept: 50, ContextAfter: 2,
 		Marker: "[... squoze: %d middle lines elided · full text kept locally as %s ...]"},
 }
 

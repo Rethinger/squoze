@@ -85,6 +85,8 @@ func main() {
 		}
 	case "version":
 		fmt.Printf("squoze v%s\n", engine.Version)
+	case "livecheck":
+		os.Exit(runLivecheck(os.Args[2:]))
 	case "retrieve":
 		fs := flag.NewFlagSet("retrieve", flag.ExitOnError)
 		home := fs.String("home", "", "squoze data dir (default: OS config dir /squoze)")

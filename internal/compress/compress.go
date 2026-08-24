@@ -17,20 +17,22 @@ import (
 
 // Params controls one compression pass.
 type Params struct {
-	MinBytes  int    // blobs below this size pass through
-	HeadLines int    // leading lines kept verbatim
-	TailLines int    // trailing lines kept verbatim (most recent signal)
-	MaxKept   int    // max middle error-lines rescued
-	Marker    string // elision marker line
+	MinBytes     int    // blobs below this size pass through
+	HeadLines    int    // leading lines kept verbatim
+	TailLines    int    // trailing lines kept verbatim (most recent signal)
+	MaxKept      int    // max middle error-lines rescued
+	ContextAfter int    // extra trailing lines rescued with each error line
+	Marker       string // elision marker line
 }
 
 // Default is the standard preset.
 var Default = Params{
-	MinBytes:  2048,
-	HeadLines: 20,
-	TailLines: 20,
-	MaxKept:   50,
-	Marker:    "[... squoze: %d middle lines elided · full text kept locally as %s ...]",
+	MinBytes:     2048,
+	HeadLines:    20,
+	TailLines:    20,
+	MaxKept:      50,
+	ContextAfter: 2,
+	Marker:       "[... squoze: %d middle lines elided · full text kept locally as %s ...]",
 }
 
 // RefPrefix is how much of the original's SHA256 hex is embedded in markers.
@@ -78,12 +80,25 @@ func Text(s string, p Params) (string, bool) {
 	middle := lines[p.HeadLines : len(lines)-p.TailLines]
 
 	kept := make([]string, 0, p.MaxKept)
-	for _, l := range middle {
+	for idx := 0; idx < len(middle); idx++ {
 		if len(kept) >= p.MaxKept {
 			break
 		}
-		if mustKeep(l) {
-			kept = append(kept, l)
+		if mustKeep(middle[idx]) {
+			// Rescue the error line plus its immediate context: the detail
+			// ("want X got Y") usually lives on the next line, and a failure
+			// without its detail is an elision of the signal itself.
+			end := idx + 1 + p.ContextAfter
+			if end > len(middle) {
+				end = len(middle)
+			}
+			for _, l := range middle[idx:end] {
+				if len(kept) >= p.MaxKept {
+					break
+				}
+				kept = append(kept, l)
+			}
+			idx = end - 1
 		}
 	}
 

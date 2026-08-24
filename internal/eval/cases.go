@@ -29,12 +29,17 @@ func extractToolContent(body []byte) string {
 func StandardCases() []Case {
 	var b strings.Builder
 	b.WriteString("$ go test ./internal/... -count=1\n")
+	// FAILs deliberately deep in the middle: they must survive via the
+	// error-rescue path, not by landing in head/tail windows.
 	for i := 0; i < 600; i++ {
-		if i%150 == 0 {
+		switch {
+		case i == 137:
 			b.WriteString("--- FAIL: TestCheckout (0.03s)\n    checkout_test.go:88: total mismatch: want 4200 got 420\n")
-		} else if i%7 == 0 {
+		case i == 421:
+			b.WriteString("--- FAIL: TestRefund (0.01s)\n    refund_test.go:12: refund idempotency violated\n")
+		case i%7 == 0:
 			b.WriteString("ok  internal/payments 0.42s\n")
-		} else {
+		default:
 			b.WriteString("    payments_test.go:12: verbose assertion padding padding padding ok\n")
 		}
 	}
@@ -63,6 +68,7 @@ func StandardCases() []Case {
 			MustKeep: []string{
 				"--- FAIL: TestCheckout",
 				"total mismatch: want 4200 got 420",
+				"refund idempotency violated",
 				"$ go test ./internal/...",
 			},
 			MinSavingsPct: 80,
