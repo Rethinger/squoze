@@ -97,6 +97,8 @@ func main() {
 		}
 	case "version":
 		fmt.Printf("squoze v%s\n", engine.Version)
+	case "harness":
+		os.Exit(runHarness(os.Args[2:]))
 	case "livecheck":
 		os.Exit(runLivecheck(os.Args[2:]))
 	case "retrieve":

@@ -22,14 +22,15 @@ import (
 
 // Options configures one wrap session.
 type Options struct {
-	Command    []string // argv of the agent to run (required)
-	Upstream   *url.URL // real provider base URL (required)
-	OriginsDir string   // "" = memory-only originals
-	ListenAddr string   // default "127.0.0.1:0" (ephemeral)
-	LogFile    string   // "" = no request log; else append JSONL per request
-	Stdin      io.Reader
-	Stdout     io.Writer
-	Stderr     io.Writer
+	Command     []string // argv of the agent to run (required)
+	Upstream    *url.URL // real provider base URL (required)
+	OriginsDir  string   // "" = memory-only originals
+	ListenAddr  string   // default "127.0.0.1:0" (ephemeral)
+	LogFile     string   // "" = no request log; else append JSONL per request
+	BaseURLEnvs []string // override the injected endpoint env names (harness presets)
+	Stdin       io.Reader
+	Stdout      io.Writer
+	Stderr      io.Writer
 }
 
 // BaseURLEnvs lists the environment variables agents commonly honor for
@@ -41,10 +42,12 @@ var BaseURLEnvs = []string{
 	"OPENAI_API_BASE",
 }
 
-// EnvVars returns the child-process environment entries pointing at addr.
-func EnvVars(addr string) []string {
-	out := make([]string, 0, len(BaseURLEnvs))
-	for _, k := range BaseURLEnvs {
+// EnvVars returns KEY=VALUE entries pointing at addr.
+func EnvVars(addr string) []string { return envVars(BaseURLEnvs, addr) }
+
+func envVars(keys []string, addr string) []string {
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
 		out = append(out, k+"=http://"+addr)
 	}
 	return out
@@ -96,8 +99,12 @@ func Run(ctx context.Context, opts Options) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	keys := BaseURLEnvs
+	if len(opts.BaseURLEnvs) > 0 {
+		keys = opts.BaseURLEnvs
+	}
 	cmd := exec.CommandContext(ctx, opts.Command[0], opts.Command[1:]...)
-	cmd.Env = append(os.Environ(), EnvVars(ln.Addr().String())...)
+	cmd.Env = append(os.Environ(), envVars(keys, ln.Addr().String())...)
 	cmd.Stdin = opts.Stdin
 	if cmd.Stdin == nil {
 		cmd.Stdin = os.Stdin
