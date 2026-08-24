@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Rethinger/squoze/internal/compress"
 	"github.com/tidwall/gjson"
 )
 
@@ -135,6 +136,52 @@ func TestSavingsFloorStillEnforced(t *testing.T) { // C4 (compress-level covered
 		t.Fatalf("C4/C-routing violated: %+v", res)
 	}
 	_ = out
+}
+
+func TestContract_ReversibleViaMarkerRef(t *testing.T) { // C8 — the reversibility contract
+	e := NewEngine(DefaultMemoCapacity) // memory-only originals
+	body := chatBody(bigTestBlob())
+	out, res := e.Apply(body)
+	if res.BlocksSqueezed != 1 {
+		t.Fatalf("fixture broken: %+v", res)
+	}
+
+	content := gjson.GetBytes(out, "messages.2.content").String()
+	i := strings.Index(content, "kept locally as ")
+	if i < 0 {
+		t.Fatalf("marker has no ref: %.200q", content)
+	}
+	rest := content[i+len("kept locally as "):]
+	end := strings.IndexByte(rest, ' ')
+	if end < 0 || end < compress.RefHexLen {
+		t.Fatalf("ref truncated in marker: %.80q", rest)
+	}
+	ref := rest[:end]
+
+	orig, err := e.orig.Resolve(ref)
+	if err != nil {
+		t.Fatalf("C8 violated: ref %q unresolvable: %v", ref, err)
+	}
+	if !strings.Contains(orig, "--- FAIL: TestX (0.01s)") {
+		t.Fatal("C8 violated: resolved original is not the full text")
+	}
+}
+
+func TestContract_ProfileAffectsAggressiveness(t *testing.T) {
+	medium := strings.Repeat("tests/test_pad.py PASSED verbose machine output line\n", 40) // ~2.3KB
+	mkBody := func(model string) []byte {
+		raw, _ := json.Marshal(medium)
+		return []byte(`{"model":"` + model + `","messages":[{"role":"tool","content":` + string(raw) + `}]}`)
+	}
+	claudeOut, claudeRes := Process(mkBody("claude-sonnet-4"))
+	deepOut, deepRes := Process(mkBody("deepseek-chat"))
+
+	if claudeRes.BlocksSqueezed != 0 {
+		t.Fatalf("claude preset must skip ~2.7KB blob, squeezed %d", claudeRes.BlocksSqueezed)
+	}
+	if deepRes.BlocksSqueezed == 0 || len(deepOut) >= len(claudeOut) {
+		t.Fatalf("deepseek preset must squeeze what claude skips: %+v", deepRes)
+	}
 }
 
 func firstDiff(a, b []byte) int {

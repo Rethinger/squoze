@@ -9,7 +9,11 @@
 //     a prefix for pocket change is a net loss
 package compress
 
-import "strings"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+)
 
 // Params controls one compression pass.
 type Params struct {
@@ -26,7 +30,15 @@ var Default = Params{
 	HeadLines: 20,
 	TailLines: 20,
 	MaxKept:   50,
-	Marker:    "[... squoze: %d middle lines elided; originals stay local ...]",
+	Marker:    "[... squoze: %d middle lines elided · full text kept locally as %s ...]",
+}
+
+// RefPrefix is how much of the original's SHA256 hex is embedded in markers.
+const RefHexLen = 12
+
+func refOf(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])[:RefHexLen]
 }
 
 const savingsFloor = 0.9 // require out <= in*floor to accept the mutation
@@ -77,6 +89,7 @@ func Text(s string, p Params) (string, bool) {
 
 	marker := p.Marker
 	marker = strings.ReplaceAll(marker, "%d", itoa(len(middle)-len(kept)))
+	marker = strings.ReplaceAll(marker, "%s", refOf(s))
 
 	out := strings.Join(head, "\n") + "\n" + marker + "\n"
 	out += strings.Join(kept, "\n")

@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 
 	"github.com/Rethinger/squoze/internal/engine"
 	"github.com/Rethinger/squoze/internal/proxy"
+	"github.com/Rethinger/squoze/internal/store"
 )
 
 func main() {
@@ -44,6 +46,31 @@ func main() {
 		}
 	case "version":
 		fmt.Printf("squoze v%s\n", engine.Version)
+	case "retrieve":
+		fs := flag.NewFlagSet("retrieve", flag.ExitOnError)
+		home := fs.String("home", "", "squoze data dir (default: OS config dir /squoze)")
+		fs.Parse(os.Args[2:])
+		if fs.NArg() != 1 {
+			fmt.Fprintln(os.Stderr, "usage: squoze retrieve <ref> [--home DIR]")
+			os.Exit(2)
+		}
+		dir := *home
+		if dir == "" {
+			if cfg, err := os.UserConfigDir(); err == nil {
+				dir = filepath.Join(cfg, "squoze")
+			}
+		}
+		orig, err := store.OpenOriginals(dir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "squoze retrieve: %v\n", err)
+			os.Exit(1)
+		}
+		text, rerr := orig.Resolve(fs.Arg(0))
+		if rerr != nil {
+			fmt.Fprintf(os.Stderr, "squoze retrieve: %v\n", rerr)
+			os.Exit(1)
+		}
+		os.Stdout.WriteString(text)
 	case "wrap":
 		fmt.Fprintln(os.Stderr, "squoze wrap: not implemented yet (MVP step 7)")
 		os.Exit(2)
@@ -59,6 +86,7 @@ func usage() {
 Usage:
   squoze proxy --port 8787 --upstream URL   optimize requests to an LLM provider
   squoze wrap CMD                           run an agent through squoze
+  squoze retrieve <ref> [--home DIR]        resolve a marker ref to the original text
   squoze version                            print version
 `)
 }
