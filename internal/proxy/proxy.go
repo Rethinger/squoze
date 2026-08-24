@@ -1,4 +1,4 @@
-﻿// Package proxy implements the drop-in HTTP proxy mode:
+// Package proxy implements the drop-in HTTP proxy mode:
 //
 //	squoze proxy --port 8787 --upstream https://api.anthropic.com
 //

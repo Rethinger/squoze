@@ -13,6 +13,7 @@ package engine
 import (
 	"github.com/Rethinger/squoze/internal/compress"
 	"github.com/Rethinger/squoze/internal/router"
+	"github.com/Rethinger/squoze/internal/store"
 	"github.com/Rethinger/squoze/internal/wire"
 
 	"github.com/tidwall/gjson"
@@ -20,22 +21,43 @@ import (
 )
 
 // Version is reported by `squoze version` and stamped into response headers.
-const Version = "0.0.2"
+const Version = "0.0.3"
 
 // Result describes one processed request body.
 type Result struct {
-	Format        wire.Format
-	OriginalBytes int
-	SentBytes     int
-	SavedBytes    int
+	Format         wire.Format
+	OriginalBytes  int
+	SentBytes      int
+	SavedBytes     int
 	BlocksSqueezed int
-	Transforms    []string // names of applied transforms, in order
+	MemoHits       int // blocks served byte-identical from the decision memo
+	Transforms     []string
 }
 
-// Process runs the full pipeline over a request body. Returns the (possibly
-// rewritten) body to send upstream plus the report. Unknown or invalid input
-// passes through byte-for-byte (fail-open contract).
+// Engine is the pipeline with its cache-guard state attached.
+type Engine struct {
+	memo *store.Memo
+}
+
+// DefaultMemoCapacity bounds pinned decisions per process (~4k blobs).
+const DefaultMemoCapacity = 4096
+
+// defaultEngine backs package-level helpers; proxy and tests share it.
+var defaultEngine = NewEngine(DefaultMemoCapacity)
+
+// NewEngine returns an isolated pipeline instance.
+func NewEngine(memoCapacity int) *Engine {
+	return &Engine{memo: store.NewMemo(memoCapacity)}
+}
+
+// Process runs the default engine over a request body.
 func Process(body []byte) ([]byte, Result) {
+	return defaultEngine.Apply(body)
+}
+
+// Apply runs the full pipeline: detect → route → squeeze (memo-aware) →
+// report. Unknown or invalid input passes through byte-for-byte (fail-open).
+func (e *Engine) Apply(body []byte) ([]byte, Result) {
 	res := Result{
 		Format:        wire.Detect(body),
 		OriginalBytes: len(body),
@@ -43,9 +65,9 @@ func Process(body []byte) ([]byte, Result) {
 	}
 	switch res.Format {
 	case wire.FormatOpenAIChat:
-		body, res = processOpenAIChat(body, res)
+		body, res = e.processOpenAIChat(body, res)
 	case wire.FormatAnthropicMessages:
-		body, res = processAnthropic(body, res)
+		body, res = e.processAnthropic(body, res)
 	default:
 		return body, res // unknown: pass through untouched
 	}
@@ -54,23 +76,27 @@ func Process(body []byte) ([]byte, Result) {
 	return body, res
 }
 
-// squeezeText applies the router+compress pair to one text blob. Returns ""
-// when the blob must not be touched.
-func squeezeText(s string) string {
+// squeezeText applies memo + router + compress to one text blob. Returns ""
+// when the blob must not be touched or was rejected after compression.
+func (e *Engine) squeezeText(s string) string {
 	switch router.Classify(s) {
 	case router.KindTestOutput, router.KindLogOutput:
-		out, changed := compress.Text(s, compress.Default)
-		if !changed {
-			return ""
-		}
-		return out
 	default:
 		return "" // prose/code/json/unknown: never naive-truncate
 	}
+	if out, ok := e.memo.Get([]byte(s)); ok {
+		return string(out) // cache-guard: pin previous decision
+	}
+	out, changed := compress.Text(s, compress.Default)
+	if !changed {
+		return ""
+	}
+	e.memo.Put([]byte(s), []byte(out))
+	return out
 }
 
 // processOpenAIChat squeezes role=tool message contents (string form).
-func processOpenAIChat(body []byte, res Result) ([]byte, Result) {
+func (e *Engine) processOpenAIChat(body []byte, res Result) ([]byte, Result) {
 	n := int(gjson.GetBytes(body, "messages.#").Int())
 	for i := 0; i < n; i++ {
 		prefix := "messages." + itoa(i)
@@ -81,11 +107,15 @@ func processOpenAIChat(body []byte, res Result) ([]byte, Result) {
 		if c.Type != gjson.String {
 			continue
 		}
-		if out := squeezeText(c.String()); out != "" {
+		before := e.memo.Len()
+		if out := e.squeezeText(c.String()); out != "" {
 			var err error
 			body, err = sjson.SetBytes(body, prefix+".content", out)
 			if err != nil {
 				continue // leave this block untouched
+			}
+			if e.memo.Len() == before {
+				res.MemoHits++
 			}
 			res.BlocksSqueezed++
 		}
@@ -96,7 +126,7 @@ func processOpenAIChat(body []byte, res Result) ([]byte, Result) {
 
 // processAnthropic squeezes tool_result blocks. Content may be a plain
 // string or an array of {type:"text",text:"..."} items; both handled.
-func processAnthropic(body []byte, res Result) ([]byte, Result) {
+func (e *Engine) processAnthropic(body []byte, res Result) ([]byte, Result) {
 	n := int(gjson.GetBytes(body, "messages.#").Int())
 	for i := 0; i < n; i++ {
 		msgPrefix := "messages." + itoa(i)
@@ -113,10 +143,14 @@ func processAnthropic(body []byte, res Result) ([]byte, Result) {
 			inner := blk.Get("content")
 			switch {
 			case inner.Type == gjson.String:
-				if out := squeezeText(inner.String()); out != "" {
+				before := e.memo.Len()
+				if out := e.squeezeText(inner.String()); out != "" {
 					var err error
 					body, err = sjson.SetBytes(body, blockPrefix+".content", out)
 					if err == nil {
+						if e.memo.Len() == before {
+							res.MemoHits++
+						}
 						res.BlocksSqueezed++
 					}
 				}
@@ -127,10 +161,14 @@ func processAnthropic(body []byte, res Result) ([]byte, Result) {
 						continue
 					}
 					textPath := blockPrefix + ".content." + itoa(k) + ".text"
-					if out := squeezeText(item.Get("text").String()); out != "" {
+					before := e.memo.Len()
+					if out := e.squeezeText(item.Get("text").String()); out != "" {
 						var err error
 						body, err = sjson.SetBytes(body, textPath, out)
 						if err == nil {
+							if e.memo.Len() == before {
+								res.MemoHits++
+							}
 							res.BlocksSqueezed++
 						}
 					}

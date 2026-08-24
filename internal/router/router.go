@@ -16,12 +16,12 @@ import (
 type Kind int
 
 const (
-	KindUnknown Kind = iota
-	KindProse            // human-written text: never touch
-	KindCode             // source code: never touch
-	KindJSON             // structured data: never naive-truncate
-	KindTestOutput       // go test / pytest / vitest style output
-	KindLogOutput        // timestamped/leveled log lines
+	KindUnknown    Kind = iota
+	KindProse           // human-written text: never touch
+	KindCode            // source code: never touch
+	KindJSON            // structured data: never naive-truncate
+	KindTestOutput      // go test / pytest / vitest style output
+	KindLogOutput       // timestamped/leveled log lines
 )
 
 func (k Kind) String() string {
@@ -81,8 +81,8 @@ func looksLikeTimestamped(s string) int {
 }
 
 const (
-	windowLen   = 32 * 1024 // per-window scan budget
-	maxWindows  = 3         // head / middle / tail
+	windowLen  = 32 * 1024 // per-window scan budget
+	maxWindows = 3         // head / middle / tail
 )
 
 // sampleWindows returns up to three slices of s for counting: the head, the
