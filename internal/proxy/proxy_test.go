@@ -74,7 +74,9 @@ func TestProxyFailOpenOnInvalidJSONStillForwards(t *testing.T) {
 
 func TestSafeProcessSurvivesEnginePanic(t *testing.T) {
 	orig := processFn
-	processFn = func([]byte) engine.Result { panic("boom") }
+	processFn = func(b []byte) ([]byte, engine.Result) {
+		panic("boom")
+	}
 	defer func() { processFn = orig }()
 
 	body := []byte(`{"anything":true}`)

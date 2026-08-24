@@ -1,4 +1,4 @@
-// Package proxy implements the drop-in HTTP proxy mode:
+﻿// Package proxy implements the drop-in HTTP proxy mode:
 //
 //	squoze proxy --port 8787 --upstream https://api.anthropic.com
 //
@@ -68,7 +68,5 @@ func safeProcess(body []byte) (out []byte, res engine.Result) {
 			res = engine.Result{OriginalBytes: len(body), SentBytes: len(body)}
 		}
 	}()
-	res = processFn(body)
-	out = body // v1 passthrough; transforms will replace this line
-	return out, res
+	return processFn(body)
 }

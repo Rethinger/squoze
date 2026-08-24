@@ -6,7 +6,10 @@
 // every request in front of every mutation.
 package wire
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+)
 
 // Format identifies a supported request shape.
 type Format int
@@ -77,9 +80,18 @@ func Detect(body []byte) Format {
 		return FormatOpenAIResponses
 	case isSet(p.System) && isSet(p.Messages):
 		return FormatAnthropicMessages
+	// Anthropic without a system prompt: `tool_use_id` exists only in
+	// Anthropic tool_result blocks; OpenAI identifies tool output by
+	// role:"tool" messages instead.
+	case isSet(p.Messages) && hasToolUseID(body):
+		return FormatAnthropicMessages
 	case isSet(p.Messages):
 		return FormatOpenAIChat
 	default:
 		return FormatUnknown
 	}
+}
+
+func hasToolUseID(body []byte) bool {
+	return bytes.Contains(body, []byte(`"tool_use_id"`))
 }

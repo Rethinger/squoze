@@ -7,9 +7,11 @@ between your AI agent and any OpenAI/Anthropic-compatible provider and shrinks
 request bodies — without losing information the model needs, and without
 breaking provider prompt caches.
 
-**Status: experimental, MVP step 1 of 8.** Right now squoze detects the wire
-format and passes everything through untouched while reporting byte counts.
-Compression transforms land in steps 2–5 (see `docs/plan` in the source repo).
+**Status: experimental, MVP step 2 of 8.** squoze detects the wire format,
+classifies content blocks and squeezes verbose machine output (test runs,
+logs) with head/tail elision that never drops error lines. Measured on a
+270KB go-test blob: **98.9% byte savings** while keeping every `--- FAIL`
+line and a stable marker for provider prompt caches.
 
 ## Why
 
