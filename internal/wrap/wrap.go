@@ -26,6 +26,7 @@ type Options struct {
 	Upstream   *url.URL // real provider base URL (required)
 	OriginsDir string   // "" = memory-only originals
 	ListenAddr string   // default "127.0.0.1:0" (ephemeral)
+	LogFile    string   // "" = no request log; else append JSONL per request
 	Stdin      io.Reader
 	Stdout     io.Writer
 	Stderr     io.Writer
@@ -74,11 +75,21 @@ func Run(ctx context.Context, opts Options) error {
 		eng = engine.NewEngine(engine.DefaultMemoCapacity)
 	}
 
+	handler := proxy.NewWithEngine(opts.Upstream, eng)
+	if opts.LogFile != "" {
+		f, err := os.OpenFile(opts.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return fmt.Errorf("wrap: log file: %w", err)
+		}
+		defer f.Close()
+		handler.WithLog(f)
+	}
+
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("wrap: listen: %w", err)
 	}
-	srv := &http.Server{Handler: proxy.NewWithEngine(opts.Upstream, eng)}
+	srv := &http.Server{Handler: handler}
 	go func() { _ = srv.Serve(ln) }()
 	defer func() { _ = srv.Close() }()
 

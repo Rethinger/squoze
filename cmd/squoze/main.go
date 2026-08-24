@@ -31,6 +31,7 @@ func main() {
 		port := fs.Int("port", 8787, "listen port")
 		upstream := fs.String("upstream", "", "upstream base URL (required)")
 		originsDir := fs.String("origins-dir", "", "persist squeezed originals here (default: memory only)")
+		logFile := fs.String("log", "", "write a full JSONL request log to this file")
 		fs.Parse(os.Args[2:])
 		if *upstream == "" {
 			fmt.Fprintln(os.Stderr, "squoze proxy: --upstream is required")
@@ -52,6 +53,15 @@ func main() {
 		} else {
 			handler = proxy.New(u)
 		}
+		if *logFile != "" {
+			f, ferr := os.OpenFile(*logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			if ferr != nil {
+				fmt.Fprintf(os.Stderr, "squoze proxy: log file: %v\n", ferr)
+				os.Exit(1)
+			}
+			defer f.Close()
+			handler.(*proxy.Server).WithLog(f)
+		}
 		addr := fmt.Sprintf(":%d", *port)
 		fmt.Printf("squoze v%s: proxying :%d → %s\n", engine.Version, *port, u)
 		if err := http.ListenAndServe(addr, handler); err != nil {
@@ -63,6 +73,7 @@ func main() {
 		upstream := fs.String("upstream", "", "upstream base URL (required)")
 		originsDir := fs.String("origins-dir", "", "persist squeezed originals here (default: memory only)")
 		addr := fs.String("listen", "", "proxy listen address (default 127.0.0.1 ephemeral)")
+		logFile := fs.String("log", "", "write a full JSONL request log to this file")
 		fs.Parse(os.Args[2:])
 		if *upstream == "" || fs.NArg() == 0 {
 			fmt.Fprintln(os.Stderr, "usage: squoze wrap --upstream URL CMD [args...]")
@@ -78,6 +89,7 @@ func main() {
 			Upstream:   u,
 			OriginsDir: *originsDir,
 			ListenAddr: *addr,
+			LogFile:    *logFile,
 		})
 		if werr != nil {
 			fmt.Fprintln(os.Stderr, werr)

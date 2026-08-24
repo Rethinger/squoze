@@ -8,11 +8,15 @@ package proxy
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/Rethinger/squoze/internal/engine"
 )
@@ -22,6 +26,15 @@ type Server struct {
 	upstream *url.URL
 	rp       *httputil.ReverseProxy
 	apply    func([]byte) ([]byte, engine.Result)
+
+	logMu sync.Mutex
+	logW  io.Writer // nil = no request log
+}
+
+// WithLog attaches a request log sink (JSONL, one object per request).
+func (s *Server) WithLog(w io.Writer) *Server {
+	s.logW = w
+	return s
 }
 
 // New returns an http.Handler that optimizes request bodies and forwards
@@ -49,10 +62,49 @@ func NewWithEngine(upstream *url.URL, eng *engine.Engine) *Server {
 	return s
 }
 
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
 // ServeHTTP implements the proxy pipeline.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+	var res engine.Result
+	defer func() {
+		if s.logW == nil {
+			return
+		}
+		s.logMu.Lock()
+		defer s.logMu.Unlock()
+		var savedPct float64
+		if res.SavedBytes > 0 && res.OriginalBytes > 0 {
+			savedPct = 100 * float64(res.SavedBytes) / float64(res.OriginalBytes)
+		}
+		line, _ := json.Marshal(map[string]any{
+			"ts":             start.UTC().Format(time.RFC3339Nano),
+			"method":         r.Method,
+			"path":           r.URL.Path,
+			"status":         rec.status,
+			"format":         res.Format.String(),
+			"original_bytes": res.OriginalBytes,
+			"sent_bytes":     res.SentBytes,
+			"saved_pct":      math.Round(savedPct*10) / 10,
+			"blocks":         res.BlocksSqueezed,
+			"memo_hits":      res.MemoHits,
+			"duration_ms":    float64(time.Since(start).Microseconds()) / 1000,
+		})
+		s.logW.Write(append(line, '\n'))
+	}()
+
 	if r.Body == nil || r.Method == http.MethodGet || r.Method == http.MethodHead {
-		s.rp.ServeHTTP(w, r)
+		s.rp.ServeHTTP(rec, r)
 		return
 	}
 
@@ -60,11 +112,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Unreadable body: nothing sensible to forward — surface a 400
 		// instead of silently sending an empty request upstream.
-		http.Error(w, "squoze: failed to read request body", http.StatusBadRequest)
+		http.Error(rec, "squoze: failed to read request body", http.StatusBadRequest)
 		return
 	}
 
-	body, res := s.safeProcess(original)
+	var body []byte
+	body, res = s.safeProcess(original)
 
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	r.ContentLength = int64(len(body))
@@ -74,7 +127,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Squoze-Sent-Bytes", strconv.Itoa(res.SentBytes))
 	w.Header().Set("X-Squoze-Format", res.Format.String())
 
-	s.rp.ServeHTTP(w, r)
+	s.rp.ServeHTTP(rec, r)
 }
 
 // safeProcess isolates the engine: any panic degrades to pass-through.
