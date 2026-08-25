@@ -72,7 +72,7 @@ func TestWireOpenCodeAllWiresCatalogAndConfig(t *testing.T) {
 	write(t, filepath.Join(home, ".config", "opencode", "opencode.json"),
 		`{"model":"p/m","provider":{"p":{"options":{"baseURL":"https://real.example/api/v1"}}}}`)
 
-	path, wired, skipped, err := WireOpenCodeAll(home, "localhost:8787")
+	path, wired, skipped, err := WireOpenCodeAll(home, 8787)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,9 +83,10 @@ func TestWireOpenCodeAllWiresCatalogAndConfig(t *testing.T) {
 	}
 	provs := root["provider"].(map[string]any)
 
-	// Custom provider: original captured into header.
+	// Custom provider: original captured into header, port assigned (order
+	// is alphabetical across config+catalog, so assert shape, not port).
 	p := provs["p"].(map[string]any)["options"].(map[string]any)
-	if p["baseURL"] != "http://localhost:8787/api/v1" {
+	if !strings.HasPrefix(p["baseURL"].(string), "http://localhost:") || !strings.HasSuffix(p["baseURL"].(string), "/api/v1") {
 		t.Fatalf("custom provider baseURL = %v", p["baseURL"])
 	}
 	if p["headers"].(map[string]any)["X-Squoze-Upstream"] != "https://real.example/api/v1" {
@@ -104,6 +105,17 @@ func TestWireOpenCodeAllWiresCatalogAndConfig(t *testing.T) {
 	if len(wired) < 10 { // custom + full catalog table
 		t.Fatalf("too few wired: %v", wired)
 	}
+	// Every wired provider carries its own port and original URL.
+	seen := map[string]bool{}
+	for _, wp := range wired {
+		if wp.Original == "" || wp.Addr == "" {
+			t.Fatalf("wired entry incomplete: %+v", wp)
+		}
+		if seen[wp.Addr] {
+			t.Fatalf("duplicate addr %s", wp.Addr)
+		}
+		seen[wp.Addr] = true
+	}
 	if len(skipped) != 0 {
 		t.Fatalf("unexpected skips: %v", skipped)
 	}
@@ -113,12 +125,12 @@ func TestWireOpenCodeAllSkipsUnknown(t *testing.T) {
 	home := t.TempDir()
 	write(t, filepath.Join(home, ".config", "opencode", "opencode.json"),
 		`{"provider":{"mystery":{}}}`)
-	_, wired, skipped, err := WireOpenCodeAll(home, "localhost:1")
+	_, wired, skipped, err := WireOpenCodeAll(home, 8787)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range wired {
-		if id == "mystery" {
+	for _, wp := range wired {
+		if wp.ID == "mystery" {
 			t.Fatal("mystery must be skipped, not wired")
 		}
 	}

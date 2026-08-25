@@ -96,13 +96,22 @@ func OpenCodeProviderIDs(home string) []string {
 	return out
 }
 
+// WiredProvider is one provider wired by WireOpenCodeAll.
+type WiredProvider struct {
+	ID       string
+	Addr     string // "localhost:PORT" the agent now points at
+	Original string // real provider URL the proxy must forward to
+}
+
 // WireOpenCodeAll wires EVERY provider the agent can use: those present in
-// the config plus the well-known catalog set (CatalogDefaults). Catalog
-// providers without an explicit baseURL get one created, with the catalog
-// default captured into the routing header — so OAuth and API-key traffic
-// alike flows through squoze. Unknown providers without a baseURL and not
-// in the table are reported in skipped.
-func WireOpenCodeAll(home, addr string) (path string, wired []string, skipped map[string]string, err error) {
+// the config plus the well-known catalog set (CatalogDefaults). Each wired
+// provider gets its OWN local port with a static upstream — custom
+// @ai-sdk/openai-compatible providers drop options.headers (opencode#5674),
+// so header-based routing is not reliable for them; dedicated ports work
+// for every provider kind. portBase is the first port; subsequent providers
+// get portBase+1, +2, ... Unknown providers without a baseURL and not in
+// the table are reported in skipped.
+func WireOpenCodeAll(home string, portBase int) (path string, wired []WiredProvider, skipped map[string]string, err error) {
 	path, existed := OpenCodeConfigPath(home)
 	data := []byte("{}")
 	if existed {
@@ -139,9 +148,10 @@ func WireOpenCodeAll(home, addr string) (path string, wired []string, skipped ma
 		ids[id] = true
 	}
 
-	wired = []string{}
+	wired = []WiredProvider{}
 	skipped = map[string]string{}
 	anyChanged := false
+	port := portBase
 	for _, id := range sortedKeys(ids) {
 		original := CatalogDefaults[id] // catalog fallback
 		if entry, ok := prov[id].(map[string]any); ok {
@@ -155,10 +165,12 @@ func WireOpenCodeAll(home, addr string) (path string, wired []string, skipped ma
 			skipped[id] = "no baseURL in config and not in the known catalog"
 			continue
 		}
+		addr := fmt.Sprintf("localhost:%d", port)
 		if changed := mutateOpenCodeProvider(prov, id, addr, original); changed {
 			anyChanged = true
 		}
-		wired = append(wired, id)
+		wired = append(wired, WiredProvider{ID: id, Addr: addr, Original: original})
+		port++
 	}
 	if !anyChanged {
 		return path, wired, skipped, nil

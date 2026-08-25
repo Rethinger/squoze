@@ -124,16 +124,32 @@ func runAgent(args []string) int {
 		// including OAuth-backed ones — rides through squoze.
 		provID := *provider
 		if *auto && provID == "" {
-			path, wired, skipped, werr := harness.WireOpenCodeAll(homeDir(), localAddr)
+			path, wired, skipped, werr := harness.WireOpenCodeAll(homeDir(), *port)
 			if werr != nil {
 				fmt.Fprintf(os.Stderr, "auto-wire failed (%s):\n%v\nFalling back to manual snippet.\n", path, werr)
 			} else {
-				fmt.Printf("wired %d providers: %s\n", len(wired), strings.Join(wired, ", "))
+				upstreams := map[string]string{}
+				ids := make([]string, 0, len(wired))
+				for _, wp := range wired {
+					upstreams[wp.Addr] = wp.Original
+					ids = append(ids, wp.ID)
+				}
+				fmt.Printf("wired %d providers: %s\n", len(wired), strings.Join(ids, ", "))
 				for id, reason := range skipped {
 					fmt.Printf("  skipped %s: %s\n", id, reason)
 				}
 				fmt.Printf("backup: %s.squoze-bak\n", path)
-				break
+				lerr := wrap.Run(context.Background(), wrap.Options{
+					Command:    []string{a.Launch},
+					Upstreams:  upstreams,
+					OriginsDir: *originsDir,
+					LogFile:    *logFile,
+					OnExit: func() {
+						p, restored, uerr := harness.UnwireOpenCode(homeDir())
+						fmt.Printf("\nunwire %s: restored=%v err=%v\n", p, restored, uerr)
+					},
+				})
+				return wrap.ExitCode(lerr)
 			}
 		}
 		if provID == "" {

@@ -33,6 +33,10 @@ type Options struct {
 	Stdout      io.Writer
 	Stderr      io.Writer
 	OnExit      func() // runs after the child exits, before Run returns
+	// Upstreams enables multi-provider mode: one local listener per entry
+	// (addr → real provider URL). Overrides Upstream; used by `sq <agent>`
+	// so every wired provider keeps its own port and original endpoint.
+	Upstreams map[string]string
 }
 
 // BaseURLEnvs lists the environment variables agents commonly honor for
@@ -55,13 +59,14 @@ func envVars(keys []string, addr string) []string {
 	return out
 }
 
-// Run starts the proxy, launches the command with injected environment,
-// streams stdio, and waits. Returns the command's exit error (if any).
+// Run starts the proxy (single upstream or a per-provider listener farm),
+// launches the command with injected environment, streams stdio, and waits.
+// Returns the command's exit error (if any).
 func Run(ctx context.Context, opts Options) error {
 	if len(opts.Command) == 0 {
 		return fmt.Errorf("wrap: no command given")
 	}
-	if opts.Upstream == nil {
+	if opts.Upstream == nil && len(opts.Upstreams) == 0 {
 		return fmt.Errorf("wrap: --upstream is required")
 	}
 	addr := opts.ListenAddr
@@ -80,6 +85,69 @@ func Run(ctx context.Context, opts Options) error {
 		eng = engine.NewEngine(engine.DefaultMemoCapacity)
 	}
 
+	var closers []func()
+	defer func() {
+		for _, c := range closers {
+			c()
+		}
+	}()
+
+	// Multi-provider mode: one listener per wired provider, each with its
+	// own static upstream — works for custom providers whose options the
+	// agent SDK drops (opencode#5674), no routing headers needed.
+	if len(opts.Upstreams) > 0 {
+		type listener struct {
+			addr string
+			srv  *http.Server
+		}
+		var listeners []listener
+		first := ""
+		for laddr, up := range opts.Upstreams {
+			u, perr := url.Parse(up)
+			if perr != nil {
+				return fmt.Errorf("wrap: upstream %q: %w", up, perr)
+			}
+			ln, lerr := net.Listen("tcp", laddr)
+			if lerr != nil {
+				return fmt.Errorf("wrap: listen %s: %w", laddr, lerr)
+			}
+			h := proxy.NewWithEngine(u, eng)
+			if opts.LogFile != "" {
+				// Log file is opened once by the single-mode branch below;
+				// in multi mode open a dedicated handle per listener share.
+				if f, ferr := os.OpenFile(opts.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); ferr == nil {
+					h.WithLog(f)
+					closers = append(closers, func() { _ = f.Close() })
+				}
+			}
+			srv := &http.Server{Handler: h}
+			go func(l net.Listener, s *http.Server) { _ = s.Serve(l) }(ln, srv)
+			listeners = append(listeners, listener{addr: ln.Addr().String(), srv: srv})
+			if first == "" {
+				first = ln.Addr().String()
+			}
+		}
+		closers = append([]func(){func() {
+			for _, l := range listeners {
+				_ = l.srv.Close()
+			}
+		}}, closers...)
+
+		ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		cmd := exec.CommandContext(ctx, opts.Command[0], opts.Command[1:]...)
+		cmd.Env = append(os.Environ(), envVars(keysFor(opts), first)...)
+		applyStd(cmd, opts)
+		fmt.Fprintf(os.Stderr, "squoze: wrapping %v via %d provider listeners\n", opts.Command, len(listeners))
+		if opts.OnExit != nil {
+			defer opts.OnExit()
+		}
+		return runChild(cmd)
+	}
+
+	if opts.Upstream == nil {
+		return fmt.Errorf("wrap: --upstream is required")
+	}
 	handler := proxy.NewWithEngine(opts.Upstream, eng)
 	if opts.LogFile != "" {
 		f, err := os.OpenFile(opts.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -107,6 +175,24 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	cmd := exec.CommandContext(ctx, opts.Command[0], opts.Command[1:]...)
 	cmd.Env = append(os.Environ(), envVars(keys, ln.Addr().String())...)
+	applyStd(cmd, opts)
+
+	fmt.Fprintf(os.Stderr, "squoze: wrapping %v → %s via http://%s\n",
+		opts.Command, opts.Upstream, ln.Addr())
+	if opts.OnExit != nil {
+		defer opts.OnExit()
+	}
+	return runChild(cmd)
+}
+
+func keysFor(opts Options) []string {
+	if len(opts.BaseURLEnvs) > 0 {
+		return opts.BaseURLEnvs
+	}
+	return BaseURLEnvs
+}
+
+func applyStd(cmd *exec.Cmd, opts Options) {
 	cmd.Stdin = opts.Stdin
 	if cmd.Stdin == nil {
 		cmd.Stdin = os.Stdin
@@ -119,12 +205,9 @@ func Run(ctx context.Context, opts Options) error {
 	if cmd.Stderr == nil {
 		cmd.Stderr = os.Stderr
 	}
+}
 
-	fmt.Fprintf(os.Stderr, "squoze: wrapping %v → %s via http://%s\n",
-		opts.Command, opts.Upstream, ln.Addr())
-	if opts.OnExit != nil {
-		defer opts.OnExit()
-	}
+func runChild(cmd *exec.Cmd) error {
 	if err := cmd.Run(); err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
