@@ -39,9 +39,10 @@ func runAgent(args []string) int {
 	logFile := fs.String("log", "", "full JSONL request log path")
 	originsDir := fs.String("origins-dir", "", "persist squeezed originals")
 	listen := fs.String("listen", "", "wrap-mode listen address (default ephemeral)")
-	auto := fs.Bool("auto", false, "opencode/omp: edit the agent's config file automatically (backup first)")
+	auto := fs.Bool("auto", true, "opencode/omp: wire ALL providers automatically before launch (default)")
+	manual := fs.Bool("manual", false, "opencode/omp: do NOT touch the config, proxy is a plain passthrough")
 	unwire := fs.Bool("unwire", false, "opencode/omp: restore the config from the pre-wire backup and exit")
-	provider := fs.String("provider", "", "opencode/omp: which provider entry to reroute (default: auto-detect)")
+	provider := fs.String("provider", "", "opencode/omp: which provider entry to reroute (default: all)")
 	fs.Parse(args[1:])
 
 	a, aerr := harness.LookupAgent(name)
@@ -100,6 +101,9 @@ func runAgent(args []string) int {
 
 	localAddr := fmt.Sprintf("localhost:%d", *port)
 	fmt.Printf("squoze v%s: proxy for %s → %s on %s\n\n", engine.Version, a.Name, u, localAddr)
+	if *manual {
+		*auto = false
+	}
 
 	// Unwire exits immediately: restore the backup, never start a server.
 	if *unwire {
