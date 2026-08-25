@@ -84,11 +84,11 @@ func runAgent(args []string) int {
 		return wrap.ExitCode(werr)
 	}
 
-	// Config-file agents: `sq <name>` with no CMD launches the agent itself;
-	// wiring happens below, unwinding after the agent exits.
+	// Config-file agents: default launch is the agent itself; an explicit
+	// CMD overrides it (headless testing: `sq oc -- opencode run "hi"`).
+	cmd := []string{a.Launch}
 	if fs.NArg() > 0 {
-		fmt.Fprintf(os.Stderr, "squoze agent %s is config-wired: extra command arguments are not needed (agent %q launches automatically)\n", a.Name, a.Launch)
-		return 2
+		cmd = fs.Args()
 	}
 	if *upstream == "" {
 		*upstream = p.DefaultUpstream
@@ -197,10 +197,10 @@ func runAgent(args []string) int {
 	// config when it exits — the whole lifecycle in one command.
 	if a.Kind == "opencode" || a.Kind == "omp" {
 		if !*auto {
-			fmt.Println("\n(--auto was not set: proxy serves as a dumb passthrough; Ctrl+C to stop)")
+			fmt.Println("\n(--manual: proxy serves as a dumb passthrough; Ctrl+C to stop)")
 		}
 		lerr := wrap.Run(context.Background(), wrap.Options{
-			Command:    []string{a.Launch},
+			Command:    cmd,
 			Upstream:   u, // fallback; wired providers carry X-Squoze-Upstream
 			OriginsDir: *originsDir,
 			ListenAddr: fmt.Sprintf(":%d", *port),
