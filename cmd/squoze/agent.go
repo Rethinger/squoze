@@ -144,7 +144,7 @@ func runAgent(args []string) int {
 				}
 				fmt.Printf("backup: %s.squoze-bak\n", path)
 				lerr := wrap.Run(context.Background(), wrap.Options{
-					Command:    []string{a.Launch},
+					Command:    cmd,
 					Upstreams:  upstreams,
 					OriginsDir: *originsDir,
 					LogFile:    *logFile,

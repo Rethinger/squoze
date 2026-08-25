@@ -70,7 +70,21 @@ func NewWithEngine(upstream *url.URL, eng *engine.Engine) *Server {
 				}
 			}
 			if target != nil {
-				pr.SetURL(target)
+				// Do NOT use SetURL — it joins target.Path with the incoming
+				// path (singleJoiningSlash). Our local baseURL already
+				// includes the provider's path prefix (e.g. /v1,
+				// /inference/v1), so the incoming path is already the
+				// complete upstream path. Joining would double it:
+				// /inference/v1 + /inference/v1/chat -> 404.
+				pr.Out.URL.Scheme = target.Scheme
+				pr.Out.URL.Host = target.Host
+				if target.RawQuery != "" {
+					if pr.Out.URL.RawQuery != "" {
+						pr.Out.URL.RawQuery = target.RawQuery + "&" + pr.Out.URL.RawQuery
+					} else {
+						pr.Out.URL.RawQuery = target.RawQuery
+					}
+				}
 				pr.Out.Host = target.Host
 			}
 		},
