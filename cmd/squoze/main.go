@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/Rethinger/squoze/internal/engine"
+	"github.com/Rethinger/squoze/internal/harness"
 	"github.com/Rethinger/squoze/internal/proxy"
 	"github.com/Rethinger/squoze/internal/store"
 	"github.com/Rethinger/squoze/internal/wrap"
@@ -24,6 +25,11 @@ func main() {
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)
+	}
+	// Top-level agent aliases: `squoze oc` ≡ `squoze agent opencode` —
+	// the shortest possible wiring command (plan: sq-command).
+	if _, aerr := harness.LookupAgent(os.Args[1]); aerr == nil {
+		os.Exit(runAgent(os.Args[1:]))
 	}
 	switch os.Args[1] {
 	case "proxy":

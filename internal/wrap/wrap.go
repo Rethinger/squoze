@@ -5,6 +5,7 @@ package wrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -31,6 +32,7 @@ type Options struct {
 	Stdin       io.Reader
 	Stdout      io.Writer
 	Stderr      io.Writer
+	OnExit      func() // runs after the child exits, before Run returns
 }
 
 // BaseURLEnvs lists the environment variables agents commonly honor for
@@ -120,11 +122,30 @@ func Run(ctx context.Context, opts Options) error {
 
 	fmt.Fprintf(os.Stderr, "squoze: wrapping %v → %s via http://%s\n",
 		opts.Command, opts.Upstream, ln.Addr())
+	if opts.OnExit != nil {
+		defer opts.OnExit()
+	}
 	if err := cmd.Run(); err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			os.Exit(ee.ExitCode())
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return &ExitError{Code: ee.ExitCode()}
 		}
 		return err
 	}
 	return nil
+}
+
+// ExitError carries the child's exit code through Run's error return so
+// callers can re-exit with the same code (after running their own cleanup).
+type ExitError struct{ Code int }
+
+func (e *ExitError) Error() string { return fmt.Sprintf("agent exited with code %d", e.Code) }
+
+// ExitCode extracts the child exit code from a Run error (0 when none).
+func ExitCode(err error) int {
+	var ee *ExitError
+	if errors.As(err, &ee) {
+		return ee.Code
+	}
+	return 1
 }

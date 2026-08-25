@@ -19,17 +19,21 @@ import (
 	"time"
 
 	"github.com/Rethinger/squoze/internal/engine"
+	"github.com/Rethinger/squoze/internal/harness"
 )
 
 // Server is the squoze HTTP proxy bound to one engine instance.
 type Server struct {
-	upstream *url.URL
+	upstream *url.URL // static default; per-request header overrides it
 	rp       *httputil.ReverseProxy
 	apply    func([]byte) ([]byte, engine.Result)
 
 	logMu sync.Mutex
 	logW  io.Writer // nil = no request log
 }
+
+// upstreamHeader aliases the harness routing header (single source there).
+const upstreamHeader = harness.UpstreamHeader
 
 // WithLog attaches a request log sink (JSONL, one object per request).
 func (s *Server) WithLog(w io.Writer) *Server {
@@ -45,6 +49,9 @@ func New(upstream *url.URL) http.Handler {
 
 // NewWithEngine binds the proxy to a specific engine (memo + originals
 // shared across requests). A nil engine selects the package default.
+// A nil upstream enables header-only routing: every request MUST carry
+// X-Squoze-Upstream or gets a 502 (used by `sq <config-agent>` where each
+// provider carries its own original endpoint).
 func NewWithEngine(upstream *url.URL, eng *engine.Engine) *Server {
 	if eng == nil {
 		eng = engine.Default()
@@ -55,8 +62,17 @@ func NewWithEngine(upstream *url.URL, eng *engine.Engine) *Server {
 	}
 	s.rp = &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.SetURL(upstream)
-			pr.Out.Host = upstream.Host
+			target := s.upstream
+			if h := pr.In.Header.Get(upstreamHeader); h != "" {
+				pr.Out.Header.Del(upstreamHeader)
+				if u, err := url.Parse(h); err == nil && u.Scheme != "" && u.Host != "" {
+					target = u
+				}
+			}
+			if target != nil {
+				pr.SetURL(target)
+				pr.Out.Host = target.Host
+			}
 		},
 	}
 	return s
@@ -102,6 +118,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 		s.logW.Write(append(line, '\n'))
 	}()
+
+	// Header-only routing mode: without a static upstream every request
+	// must name its destination, or there is nowhere to go.
+	if s.upstream == nil && r.Header.Get(upstreamHeader) == "" {
+		http.Error(rec, "squoze: no route: request lacks "+upstreamHeader+" and no default upstream is configured", http.StatusBadGateway)
+		return
+	}
 
 	if r.Body == nil || r.Method == http.MethodGet || r.Method == http.MethodHead {
 		s.rp.ServeHTTP(rec, r)

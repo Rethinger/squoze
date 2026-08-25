@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -61,35 +60,43 @@ func runAgent(args []string) int {
 		*upstream = p.DefaultUpstream
 	}
 
-	// Env-driven agent with an explicit command → wrap (preset envs injected).
-	if fs.NArg() > 0 && a.Preset != "" {
+	// Env-driven agent (with or without explicit command → default Launch):
+	// wrap injects the preset's base-URL envs and runs the agent.
+	if a.Kind == "env" {
+		cmd := fs.Args()
+		if len(cmd) == 0 {
+			cmd = []string{a.Launch}
+		}
 		u, uerr := url.Parse(*upstream)
 		if uerr != nil {
 			fmt.Fprintln(os.Stderr, "squoze agent:", uerr)
 			return 2
 		}
 		werr := wrap.Run(context.Background(), wrap.Options{
-			Command:     fs.Args(),
+			Command:     cmd,
 			Upstream:    u,
 			OriginsDir:  *originsDir,
 			ListenAddr:  *listen,
 			LogFile:     *logFile,
 			BaseURLEnvs: p.BaseURLEnvs,
 		})
-		if werr != nil {
-			fmt.Fprintln(os.Stderr, werr)
-			return 1
-		}
-		return 0
+		return wrap.ExitCode(werr)
 	}
 
+	// Config-file agents: `sq <name>` with no CMD launches the agent itself;
+	// wiring happens below, unwinding after the agent exits.
+	if fs.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "squoze agent %s is config-wired: extra command arguments are not needed (agent %q launches automatically)\n", a.Name, a.Launch)
+		return 2
+	}
+	if *upstream == "" {
+		*upstream = p.DefaultUpstream
+	}
 	u, uerr := url.Parse(*upstream)
 	if uerr != nil {
 		fmt.Fprintln(os.Stderr, "squoze agent:", uerr)
 		return 2
 	}
-	handler, cleanup := buildProxyHandler(*originsDir, *logFile, u)
-	defer cleanup()
 
 	localAddr := fmt.Sprintf("localhost:%d", *port)
 	fmt.Printf("squoze v%s: proxy for %s → %s on %s\n\n", engine.Version, a.Name, u, localAddr)
@@ -155,19 +162,34 @@ func runAgent(args []string) int {
 		fmt.Println("Add to ~/.omp/agent/models.yml (route catalog provider through squoze):")
 		fmt.Println(harness.OMPSnippet("anthropic", localAddr, "ANTHROPIC_API_KEY"))
 		fmt.Println("\nVerify with `omp models anthropic`, then start omp as usual.")
-	default:
-		for _, e := range p.EnvFor(localAddr) {
-			k, v, _ := strings.Cut(e, "=")
-			fmt.Printf("  bash:            export %s=\"%s\"\n", k, v)
-			fmt.Printf("  PowerShell 5.1:  $env:%s = \"%s\"\n", k, v)
-		}
-		fmt.Printf("\nOr wrap it in one line: squoze agent %s -- %s\n", a.Name, a.Launch)
 	}
 
-	if lerr := http.ListenAndServe(fmt.Sprintf(":%d", *port), handler); lerr != nil {
-		fmt.Fprintln(os.Stderr, lerr)
-		return 1
+	// Config agents: `sq <name>` launches the agent itself and unwinds the
+	// config when it exits — the whole lifecycle in one command.
+	if a.Kind == "opencode" || a.Kind == "omp" {
+		if !*auto {
+			fmt.Println("\n(--auto was not set: proxy serves as a dumb passthrough; Ctrl+C to stop)")
+		}
+		lerr := wrap.Run(context.Background(), wrap.Options{
+			Command:    []string{a.Launch},
+			Upstream:   u, // fallback; wired providers carry X-Squoze-Upstream
+			OriginsDir: *originsDir,
+			ListenAddr: fmt.Sprintf(":%d", *port),
+			LogFile:    *logFile,
+			OnExit: func() {
+				switch a.Kind {
+				case "opencode":
+					path, restored, err := harness.UnwireOpenCode(homeDir())
+					fmt.Printf("\nunwire %s: restored=%v err=%v\n", path, restored, err)
+				case "omp":
+					path, restored, err := harness.UnwireOMP(homeDir())
+					fmt.Printf("\nunwire %s: restored=%v err=%v\n", path, restored, err)
+				}
+			},
+		})
+		return wrap.ExitCode(lerr)
 	}
+
 	return 0
 }
 

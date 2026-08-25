@@ -49,6 +49,11 @@ func stripBOM(b []byte) []byte {
 	return b
 }
 
+// UpstreamHeader is the request header carrying a per-request original
+// provider URL (multi-provider transparent routing). The proxy consumes it
+// and strips it before egress.
+const UpstreamHeader = "X-Squoze-Upstream"
+
 // OpenCodeProviderIDs lists provider IDs present in the home config, so the
 // CLI can wire the one the user actually uses (not just "anthropic").
 func OpenCodeProviderIDs(home string) []string {
@@ -118,17 +123,29 @@ func WireOpenCode(home, providerID, addr string) (string, bool, error) {
 	}
 	// Preserve the original endpoint's path: providers behind path prefixes
 	// (e.g. ".../v1", ".../api") break when only the host is redirected.
+	// The full original URL also rides along in a routing header so the
+	// proxy forwards each request to ITS provider (multi-provider mode).
 	suffix := ""
+	original := ""
 	if prevURL, ok := opts["baseURL"].(string); ok && prevURL != "" {
+		original = prevURL
 		if pu, perr := url.Parse(prevURL); perr == nil && pu.Path != "" && pu.Path != "/" {
 			suffix = pu.Path
 		}
 	}
 	next := "http://" + addr + suffix
-	if opts["baseURL"] == next {
-		return path, false, nil // already wired
+	if opts["baseURL"] == next && original == "" {
+		return path, false, nil // already wired, nothing to capture
 	}
 	opts["baseURL"] = next
+	if original != "" {
+		hdrs, _ := opts["headers"].(map[string]any)
+		if hdrs == nil {
+			hdrs = map[string]any{}
+			opts["headers"] = hdrs
+		}
+		hdrs[UpstreamHeader] = original
+	}
 	out, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
 		return path, false, err
@@ -175,6 +192,12 @@ func WireOMP(home, providerID, addr, apiKeyEnv string) (string, bool, error) {
 
 	providersNode := ensureMappingChild(&doc, "providers")
 	provNode := ensureMappingChild(providersNode, providerID)
+	// Capture the original baseUrl (if any) into the routing header BEFORE
+	// overwriting it, so the proxy forwards to the real provider.
+	if orig := scalarValue(provNode, "baseUrl"); orig != "" {
+		hdrsNode := ensureMappingChild(provNode, "headers")
+		setScalarChild(hdrsNode, UpstreamHeader, orig)
+	}
 	setScalarChild(provNode, "baseUrl", "http://"+addr+"/v1")
 	setScalarChild(provNode, "apiKey", apiKeyEnv)
 	setBoolChild(provNode, "authHeader", true)
@@ -263,6 +286,15 @@ func ensureMappingChild(doc *yaml.Node, key string) *yaml.Node {
 
 func setScalarChild(mapping *yaml.Node, key, value string) {
 	setTypedScalar(mapping, key, value, "!!str")
+}
+
+func scalarValue(mapping *yaml.Node, key string) string {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return mapping.Content[i+1].Value
+		}
+	}
+	return ""
 }
 
 func setBoolChild(mapping *yaml.Node, key string, value bool) {
