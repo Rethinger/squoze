@@ -119,20 +119,29 @@ func runAgent(args []string) int {
 
 	switch a.Kind {
 	case "opencode":
-		// Which provider to reroute: --provider wins; else auto-detect the
-		// first provider with an entry in the user's config (the live-test
-		// lesson: wiring "anthropic" misses agents whose model rides a
-		// custom provider, leaving sq.jsonl empty).
+		// --provider → single-provider wiring; otherwise wire EVERY provider
+		// (config entries + known catalog), so any model the user picks —
+		// including OAuth-backed ones — rides through squoze.
 		provID := *provider
+		if *auto && provID == "" {
+			path, wired, skipped, werr := harness.WireOpenCodeAll(homeDir(), localAddr)
+			if werr != nil {
+				fmt.Fprintf(os.Stderr, "auto-wire failed (%s):\n%v\nFalling back to manual snippet.\n", path, werr)
+			} else {
+				fmt.Printf("wired %d providers: %s\n", len(wired), strings.Join(wired, ", "))
+				for id, reason := range skipped {
+					fmt.Printf("  skipped %s: %s\n", id, reason)
+				}
+				fmt.Printf("backup: %s.squoze-bak\n", path)
+				break
+			}
+		}
 		if provID == "" {
 			ids := harness.OpenCodeProviderIDs(homeDir())
-			if len(ids) == 0 {
-				ids = []string{"anthropic"}
-			}
-			provID = ids[0]
-			if len(ids) > 1 {
-				fmt.Printf("multiple providers found: %s — wiring %q (pick with --provider)\n",
-					strings.Join(ids, ", "), provID)
+			if len(ids) > 0 {
+				provID = ids[0]
+			} else {
+				provID = "anthropic"
 			}
 		}
 		if *auto {

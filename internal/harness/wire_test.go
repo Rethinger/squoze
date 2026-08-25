@@ -66,6 +66,67 @@ func TestWireOpenCodeJSONCGuidesManual(t *testing.T) {
 	}
 }
 
+func TestWireOpenCodeAllWiresCatalogAndConfig(t *testing.T) {
+	home := t.TempDir()
+	// Config has ONE custom provider with baseURL; catalog providers are absent.
+	write(t, filepath.Join(home, ".config", "opencode", "opencode.json"),
+		`{"model":"p/m","provider":{"p":{"options":{"baseURL":"https://real.example/api/v1"}}}}`)
+
+	path, wired, skipped, err := WireOpenCodeAll(home, "localhost:8787")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	var root map[string]any
+	if json.Unmarshal(raw, &root) != nil {
+		t.Fatal("invalid json after all-wire")
+	}
+	provs := root["provider"].(map[string]any)
+
+	// Custom provider: original captured into header.
+	p := provs["p"].(map[string]any)["options"].(map[string]any)
+	if p["baseURL"] != "http://localhost:8787/api/v1" {
+		t.Fatalf("custom provider baseURL = %v", p["baseURL"])
+	}
+	if p["headers"].(map[string]any)["X-Squoze-Upstream"] != "https://real.example/api/v1" {
+		t.Fatalf("custom header = %v", p["headers"])
+	}
+
+	// Catalog provider without config entry: created from the defaults table.
+	an := provs["anthropic"].(map[string]any)["options"].(map[string]any)
+	if an["baseURL"] != "http://localhost:8787" {
+		t.Fatalf("catalog baseURL = %v", an["baseURL"])
+	}
+	if an["headers"].(map[string]any)["X-Squoze-Upstream"] != "https://api.anthropic.com" {
+		t.Fatalf("catalog header = %v", an["headers"])
+	}
+
+	if len(wired) < 10 { // custom + full catalog table
+		t.Fatalf("too few wired: %v", wired)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("unexpected skips: %v", skipped)
+	}
+}
+
+func TestWireOpenCodeAllSkipsUnknown(t *testing.T) {
+	home := t.TempDir()
+	write(t, filepath.Join(home, ".config", "opencode", "opencode.json"),
+		`{"provider":{"mystery":{}}}`)
+	_, wired, skipped, err := WireOpenCodeAll(home, "localhost:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range wired {
+		if id == "mystery" {
+			t.Fatal("mystery must be skipped, not wired")
+		}
+	}
+	if _, ok := skipped["mystery"]; !ok {
+		t.Fatalf("mystery must be reported in skipped: %v", skipped)
+	}
+}
+
 func TestUnwireOpenCodeRestoresBackup(t *testing.T) {
 	home := t.TempDir()
 	orig := `{"model":"keep-me"}`

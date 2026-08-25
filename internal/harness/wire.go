@@ -54,6 +54,23 @@ func stripBOM(b []byte) []byte {
 // and strips it before egress.
 const UpstreamHeader = "X-Squoze-Upstream"
 
+// CatalogDefaults maps well-known opencode catalog provider IDs to their
+// original API roots. Providers WITHOUT an explicit baseURL in the user's
+// config use these as the capture source for the routing header (source of
+// truth: models.dev catalog; extend as needed).
+var CatalogDefaults = map[string]string{
+	"anthropic":  "https://api.anthropic.com",
+	"openai":     "https://api.openai.com/v1",
+	"google":     "https://generativelanguage.googleapis.com/v1beta",
+	"openrouter": "https://openrouter.ai/api/v1",
+	"groq":       "https://api.groq.com/openai/v1",
+	"mistral":    "https://api.mistral.ai/v1",
+	"xai":        "https://api.x.ai/v1",
+	"deepseek":   "https://api.deepseek.com",
+	"fireworks":  "https://api.fireworks.ai/inference/v1",
+	"together":   "https://api.together.xyz/v1",
+}
+
 // OpenCodeProviderIDs lists provider IDs present in the home config, so the
 // CLI can wire the one the user actually uses (not just "anthropic").
 func OpenCodeProviderIDs(home string) []string {
@@ -77,6 +94,123 @@ func OpenCodeProviderIDs(home string) []string {
 	}
 	sortStrings(out)
 	return out
+}
+
+// WireOpenCodeAll wires EVERY provider the agent can use: those present in
+// the config plus the well-known catalog set (CatalogDefaults). Catalog
+// providers without an explicit baseURL get one created, with the catalog
+// default captured into the routing header — so OAuth and API-key traffic
+// alike flows through squoze. Unknown providers without a baseURL and not
+// in the table are reported in skipped.
+func WireOpenCodeAll(home, addr string) (path string, wired []string, skipped map[string]string, err error) {
+	path, existed := OpenCodeConfigPath(home)
+	data := []byte("{}")
+	if existed {
+		raw, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return path, nil, nil, rerr
+		}
+		if filepath.Ext(path) == ".jsonc" {
+			return path, nil, nil, fmt.Errorf("%s contains comments or non-strict JSON; use --provider for single-provider manual wiring", path)
+		}
+		if len(strings.TrimSpace(string(raw))) > 0 {
+			data = stripBOM(raw)
+		}
+	}
+	if berr := backupOnce(path, data, existed); berr != nil {
+		return path, nil, nil, berr
+	}
+
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		return path, nil, nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	prov, _ := root["provider"].(map[string]any)
+	if prov == nil {
+		prov = map[string]any{}
+		root["provider"] = prov
+	}
+
+	ids := map[string]bool{}
+	for id := range prov {
+		ids[id] = true
+	}
+	for id := range CatalogDefaults {
+		ids[id] = true
+	}
+
+	wired = []string{}
+	skipped = map[string]string{}
+	anyChanged := false
+	for _, id := range sortedKeys(ids) {
+		original := CatalogDefaults[id] // catalog fallback
+		if entry, ok := prov[id].(map[string]any); ok {
+			if opts, ok := entry["options"].(map[string]any); ok {
+				if b, ok := opts["baseURL"].(string); ok && b != "" {
+					original = b
+				}
+			}
+		}
+		if original == "" {
+			skipped[id] = "no baseURL in config and not in the known catalog"
+			continue
+		}
+		if changed := mutateOpenCodeProvider(prov, id, addr, original); changed {
+			anyChanged = true
+		}
+		wired = append(wired, id)
+	}
+	if !anyChanged {
+		return path, wired, skipped, nil
+	}
+	out, merr := json.MarshalIndent(root, "", "  ")
+	if merr != nil {
+		return path, nil, nil, merr
+	}
+	if werr := os.WriteFile(path, out, 0o644); werr != nil {
+		return path, nil, nil, werr
+	}
+	return path, wired, skipped, nil
+}
+
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sortStrings(out)
+	return out
+}
+
+// mutateOpenCodeProvider redirects provider id to http://addr (+ original
+// path suffix) and pins the original URL into the routing header. Idempotent.
+func mutateOpenCodeProvider(prov map[string]any, id, addr, original string) bool {
+	entry, _ := prov[id].(map[string]any)
+	if entry == nil {
+		entry = map[string]any{}
+		prov[id] = entry
+	}
+	opts, _ := entry["options"].(map[string]any)
+	if opts == nil {
+		opts = map[string]any{}
+		entry["options"] = opts
+	}
+	suffix := ""
+	if pu, perr := url.Parse(original); perr == nil && pu.Path != "" && pu.Path != "/" {
+		suffix = pu.Path
+	}
+	next := "http://" + addr + suffix
+	hdrs, _ := opts["headers"].(map[string]any)
+	if hdrs == nil {
+		hdrs = map[string]any{}
+		opts["headers"] = hdrs
+	}
+	if opts["baseURL"] == next && hdrs[UpstreamHeader] == original {
+		return false // already wired exactly like this
+	}
+	opts["baseURL"] = next
+	hdrs[UpstreamHeader] = original
+	return true
 }
 
 // WireOpenCode points providerID's built-in provider entry at addr inside
