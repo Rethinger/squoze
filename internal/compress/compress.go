@@ -46,19 +46,25 @@ func refOf(s string) string {
 const savingsFloor = 0.9 // require out <= in*floor to accept the mutation
 
 // mustKeep reports whether a middle line carries failure signal and must
-// survive truncation. Deliberately narrow: false positives cost bytes, false
-// negatives cost information the model needed.
+// survive truncation. Deliberately broad for error diagnostics, narrow for noise.
 func mustKeep(line string) bool {
 	u := strings.ToUpper(line)
 	for _, pat := range []string{
-		"--- FAIL", "FAIL:", "FAILED ", "PANIC:", "FATAL", "ERROR", "EXCEPTION",
+		"--- FAIL", "FAIL:", "FAILED", "PANIC:", "FATAL", "ERROR", "EXCEPTION",
 		"ASSERTIONERROR", "TRACEBACK", "BUILD FAILED", "✗",
+		"EXIT STATUS", "NON-ZERO EXIT", "UNDEFINED:", "SYNTAXERROR",
+		"SEGMENTATION FAULT", "SIGSEGV", "NULLPOINTEREXCEPTION",
 	} {
 		if strings.Contains(u, pat) {
 			return true
 		}
 	}
 	return false
+}
+
+// MustKeep exposes the error signal detector publicly for distillers.
+func MustKeep(line string) bool {
+	return mustKeep(line)
 }
 
 // markerPrefix identifies our own elision markers; its presence means the

@@ -11,7 +11,12 @@
 package engine
 
 import (
+	"bytes"
+	"strings"
+	"time"
+
 	"github.com/Rethinger/squoze/internal/compress"
+	"github.com/Rethinger/squoze/internal/distill"
 	"github.com/Rethinger/squoze/internal/profile"
 	"github.com/Rethinger/squoze/internal/router"
 	"github.com/Rethinger/squoze/internal/store"
@@ -34,6 +39,7 @@ type Result struct {
 	BlocksSqueezed int
 	MemoHits       int // blocks served byte-identical from the decision memo
 	Transforms     []string
+	DurationMS     float64
 }
 
 // Engine is the pipeline with its cache-guard state attached.
@@ -70,23 +76,32 @@ func Process(body []byte) ([]byte, Result) {
 // memo-aware) → report. Unknown or invalid input passes through
 // byte-for-byte (fail-open).
 func (e *Engine) Apply(body []byte) ([]byte, Result) {
+	start := time.Now()
 	res := Result{
 		Format:        wire.Detect(body),
 		OriginalBytes: len(body),
 		SentBytes:     len(body), // fail-open default: untouched passthrough
 	}
+	// Fast bailout: if body has no tool messages or is too small, pass through instantly.
+	if len(body) < 256 || !bytes.Contains(body, []byte("tool")) {
+		res.DurationMS = float64(time.Since(start).Microseconds()) / 1000.0
+		return body, res
+	}
+
 	family := profile.Detect(gjson.GetBytes(body, "model").String())
 	res.Family = family.String()
 	switch res.Format {
 	case wire.FormatOpenAIChat:
-		body, res = e.processOpenAIChat(family, body, res)
+		body, res = e.processOpenAIChatFast(family, body, res)
 	case wire.FormatAnthropicMessages:
-		body, res = e.processAnthropic(family, body, res)
+		body, res = e.processAnthropicFast(family, body, res)
 	default:
+		res.DurationMS = float64(time.Since(start).Microseconds()) / 1000.0
 		return body, res // unknown: pass through untouched
 	}
 	res.SentBytes = len(body)
 	res.SavedBytes = res.OriginalBytes - res.SentBytes
+	res.DurationMS = float64(time.Since(start).Microseconds()) / 1000.0
 	return body, res
 }
 
@@ -114,6 +129,73 @@ func (e *Engine) squeezeText(f profile.Family, s string) string {
 	}
 	e.memo.Put(key, []byte(out))
 	return out
+}
+
+// distillText runs the distillation pipeline for text content:
+// 1. Check memo cache (cache-guard contract)
+// 2. Pass 1: Unified Diff Distillation
+// 3. Pass 2: JSON Structural Pruning & Tabular Lifting
+// 4. Pass 3: Test & Log Head/Tail Squeezer (Never-Elide 2.0 with profile sensitivity)
+// 5. Pass 4: Generic Terminal & ANSI Sanitization
+func (e *Engine) distillText(f profile.Family, s string) string {
+	params := profile.ParamsFor(f)
+	if len(s) < 64 {
+		return ""
+	}
+	key := []byte(f.String() + "\x00" + s)
+	if out, ok := e.memo.Get(key); ok {
+		return string(out)
+	}
+
+	orig := s
+
+	// Pass 1: Unified Diff Distillation
+	if distill.IsUnifiedDiff(s) {
+		if sDiff, ok := distill.DistillDiff(s); ok {
+			e.storeAndMemo(key, orig, sDiff)
+			return sDiff
+		}
+	}
+
+	// Pass 2: JSON Structural Pruning & Tabular Lifting
+	trimmed := strings.TrimSpace(s)
+	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+		if sJSON, ok := distill.DistillJSON(s); ok {
+			e.storeAndMemo(key, orig, sJSON)
+			return sJSON
+		}
+	}
+
+	// Pass 3: Test & Log Head/Tail Squeezer (Never-Elide 2.0)
+	switch router.Classify(s) {
+	case router.KindTestOutput, router.KindLogOutput:
+		// Strip ANSI and normalize progress before test output compression
+		cleaned := distill.StripANSI(s)
+		cleaned = distill.CleanCarriageReturns(cleaned)
+		out, changed := compress.Text(cleaned, params)
+		if changed {
+			e.storeAndMemo(key, orig, out)
+			return out
+		}
+		// If below profile.MinBytes (e.g. Claude ~2.7KB), pass through untouched
+		return ""
+	}
+
+	// Pass 4: Generic terminal hygiene for logs/noise
+	sClean, termChanged := distill.SanitizeTerminal(s)
+	if termChanged && len(sClean) < len(orig)*9/10 {
+		e.storeAndMemo(key, orig, sClean)
+		return sClean
+	}
+
+	return ""
+}
+
+func (e *Engine) storeAndMemo(key []byte, orig, out string) {
+	if _, err := e.orig.Put([]byte(orig)); err != nil {
+		_ = err
+	}
+	e.memo.Put(key, []byte(out))
 }
 
 // processOpenAIChat squeezes role=tool message contents (string form).

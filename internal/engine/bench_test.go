@@ -61,6 +61,25 @@ func BenchmarkMemoHit(b *testing.B) {
 	_ = out
 }
 
+func BenchmarkApplyMultiMessage40(b *testing.B) {
+	var msgs []string
+	raw, _ := json.Marshal(benchBlob(100))
+	for i := 0; i < 40; i++ {
+		if i%2 == 0 {
+			msgs = append(msgs, `{"role":"user","content":"run tests"}`)
+		} else {
+			msgs = append(msgs, `{"role":"tool","content":`+string(raw)+`}`)
+		}
+	}
+	body := []byte(`{"model":"gpt-5","messages":[` + strings.Join(msgs, ",") + `]}`)
+	e := NewEngine(DefaultMemoCapacity)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e.Apply(body)
+	}
+}
+
 var sink []byte
 
 func BenchmarkPassthroughUnknownFormat(b *testing.B) {
@@ -71,3 +90,4 @@ func BenchmarkPassthroughUnknownFormat(b *testing.B) {
 		sink, _ = e.Apply(body)
 	}
 }
+
