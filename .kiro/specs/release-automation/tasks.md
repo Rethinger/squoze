@@ -52,7 +52,7 @@ Requirements: [requirements.md](requirements.md)
 
 ## Phase 3 — Backfill and verify
 
-- [ ] **TSK-006**: Publish the missing `v0.1.2` release.
+- [x] **TSK-006**: Publish the missing `v0.1.2` release.
   - Requirement: FR-5
   - Deliverables: a published GitHub Release for `v0.1.2`
   - Detail: the automation only fires on *new* tag pushes, so `v0.1.2` (already
@@ -61,8 +61,18 @@ Requirements: [requirements.md](requirements.md)
     it; retro-publishing v0.1.2 by hand is the fallback if the history must
     match exactly.
   - Acceptance: no tag remains without a corresponding release.
+  - Done: `v0.1.3` was cut by automation, then `v0.1.2` was backfilled by hand
+    (notes-only, matching how v0.1.0/v0.1.1 exist — those predate goreleaser and
+    also carry 0 assets). Its 13 commits were real work (agent wiring, per-provider
+    listener ports, one-command lifecycle, library facade) that had been tagged and
+    never announced. All four tags now have releases.
+  - ⚠️ **Trap hit here:** GitHub assigns the *Latest* flag by publish date, not by
+    semver, so publishing old `v0.1.2` silently moved Latest off `v0.1.3` —
+    pointing `releases/latest` (the endpoint `install.sh` uses) at a release with
+    **no binaries**. Corrected with `gh release edit v0.1.3 --latest`. Re-check
+    `releases/latest` after backfilling any old tag.
 
-- [ ] **TSK-007**: Verify end to end on a real tag.
+- [x] **TSK-007**: Verify end to end on a real tag.
   - Requirement: AC-1.1, AC-2.1, AC-4.1
   - Detail: after the tag push, confirm the run's release job succeeded, the
     Release lists archives + `checksums.txt`, and a downloaded linux/amd64
@@ -89,5 +99,19 @@ live exercise, verified by TSK-007.
 | TSK-003 dist/ ignored | Complete |
 | TSK-004 tags trigger | Complete |
 | TSK-005 release job | Complete |
-| TSK-006 backfill v0.1.2 | Pending |
-| TSK-007 end-to-end verify | Pending |
+| TSK-006 backfill v0.1.2 | Complete |
+| TSK-007 end-to-end verify | Complete |
+
+## Evidence
+
+- **TSK-005/007** — run 33663064216 on tag `v0.1.3`: `fmt` ✅,
+  `test (ubuntu-latest)` ✅, `test (windows-latest)` ✅, `Release` ✅.
+- Release `v0.1.3`: 5 archives + `checksums.txt`, `draft: false`,
+  `prerelease: false`, Latest.
+- Downloaded `squoze_linux_amd64.tar.gz` and verified against `checksums.txt`
+  (`sha256sum -c` OK). Archive carries `LICENSE`, `README.md`, `squoze`. The
+  extracted binary prints `squoze v0.1.3` — matching the tag, so the version
+  constant bump and the tag agree.
+- **TSK-006** — all four tags (`v0.1.0`…`v0.1.3`) now have releases;
+  `releases/latest` resolves to `v0.1.3` with 6 assets after the Latest-flag
+  correction noted above.
