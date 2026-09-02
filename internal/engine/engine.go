@@ -22,7 +22,7 @@ import (
 )
 
 // Version is reported by `squoze version` and stamped into response headers.
-const Version = "0.1.2"
+const Version = "0.1.3"
 
 // Result describes one processed request body.
 type Result struct {
