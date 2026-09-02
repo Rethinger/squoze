@@ -1,7 +1,11 @@
 // Command squoze is the universal, deterministic LLM context optimizer.
 //
-//	squoze proxy  --port 8787 --upstream https://api.anthropic.com
-//	squoze wrap   --upstream URL <agent command>
+//	squoze proxy     --port 8787 --upstream https://api.anthropic.com
+//	squoze wrap      --upstream URL <agent command>
+//	squoze agent     <name> [flags] [-- CMD...]   (also: squoze <name>, e.g. squoze oc)
+//	squoze harness   <name> [flags] [-- CMD...]
+//	squoze livecheck --upstream URL --model ID
+//	squoze retrieve  <ref> [--home DIR]
 //	squoze version
 package main
 
@@ -9,6 +13,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,8 +28,20 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		usage()
+		usageTo(os.Stderr)
 		os.Exit(2)
+	}
+	// Version and help are resolved before the agent-alias lookup below, so an
+	// agent whose name collides with a reserved word cannot shadow them. Flag
+	// spellings are accepted alongside the subcommand to match the sibling
+	// gateway CLI in 2papi (cmd/gateway/main.go).
+	switch os.Args[1] {
+	case "version", "-v", "-version", "--version":
+		fmt.Printf("squoze v%s\n", engine.Version)
+		return
+	case "help", "-h", "--help":
+		usageTo(os.Stdout)
+		return
 	}
 	// Top-level agent aliases: `squoze oc` ≡ `squoze agent opencode` —
 	// the shortest possible wiring command (plan: sq-command).
@@ -101,8 +118,6 @@ func main() {
 			fmt.Fprintln(os.Stderr, werr)
 			os.Exit(1)
 		}
-	case "version":
-		fmt.Printf("squoze v%s\n", engine.Version)
 	case "agent":
 		os.Exit(runAgent(os.Args[2:]))
 	case "harness":
@@ -135,18 +150,29 @@ func main() {
 		}
 		os.Stdout.WriteString(text)
 	default:
-		usage()
+		fmt.Fprintf(os.Stderr, "squoze: unknown command %q\n\n", os.Args[1])
+		usageTo(os.Stderr)
 		os.Exit(2)
 	}
 }
 
-func usage() {
-	fmt.Fprint(os.Stderr, `squoze — your context, squoze.
+// usageTo writes the command list to w. Explicit help requests pass os.Stdout so
+// the output can be piped; the no-args and unknown-command paths pass os.Stderr
+// and exit non-zero, keeping usage out of a caller's data stream.
+func usageTo(w io.Writer) {
+	fmt.Fprint(w, `squoze — your context, squoze.
 
 Usage:
   squoze proxy --port 8787 --upstream URL   optimize requests to an LLM provider
-  squoze wrap CMD                           run an agent through squoze
+  squoze wrap --upstream URL CMD [args...]  run an agent through squoze
+  squoze agent <name> [flags] [-- CMD...]   wire a coding agent (opencode, omp, ...)
+  squoze harness <name> [flags] [-- CMD...] wire a provider harness (claude, openai, ...)
+  squoze livecheck --upstream URL --model ID  smoke-test a provider
   squoze retrieve <ref> [--home DIR]        resolve a marker ref to the original text
   squoze version                            print version
+  squoze help                               print this message
+
+Agent names work as top-level shorthands: "squoze oc" ≡ "squoze agent opencode".
+Run "squoze agent" or "squoze harness" with no name to list what is supported.
 `)
 }

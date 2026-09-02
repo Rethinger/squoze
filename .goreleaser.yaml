@@ -1,0 +1,54 @@
+# Release build for the squoze CLI. Run `goreleaser check` after editing —
+# CI pins goreleaser to `latest`, so deprecated properties are a future breakage.
+version: 2
+project_name: squoze
+
+builds:
+  - id: squoze
+    main: ./cmd/squoze
+    binary: squoze
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # windows/arm64 has no meaningful user base for this tool yet.
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: tarball
+    ids: [squoze]
+    name_template: "squoze_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - src: README.md
+        dst: README.md
+      - src: LICENSE
+        dst: LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  draft: false
+  # Tags like v0.2.0-rc1 are published as pre-releases, so they never become
+  # "Latest" for install scripts or the Go module proxy's default resolution.
+  prerelease: auto

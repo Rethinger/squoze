@@ -3,6 +3,7 @@ name: ci
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 permissions:
@@ -38,3 +39,29 @@ jobs:
             echo "gofmt needed on:"; echo "$unformatted"
             exit 1
           fi
+
+  # Publishes only for v* tags. The tags trigger above is what makes this job
+  # reachable at all — with a branches-only trigger a tag push starts no
+  # workflow, so this condition can never be true.
+  release:
+    name: Release
+    needs: [test, fmt]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # goreleaser builds release notes from history; a shallow clone breaks it.
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
