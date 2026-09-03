@@ -12,6 +12,7 @@ package engine
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"time"
 
@@ -64,6 +65,18 @@ func NewEngineWith(memoCapacity int, orig *store.Originals) *Engine {
 	return &Engine{memo: store.NewMemo(memoCapacity), orig: orig}
 }
 
+// ResolveOriginal recovers the un-elided original text by its reference hash.
+func (e *Engine) ResolveOriginal(ref string) ([]byte, error) {
+	if e.orig == nil {
+		return nil, errors.New("originals store not configured")
+	}
+	s, err := e.orig.Resolve(ref)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(s), nil
+}
+
 // Default returns the package-level shared engine.
 func Default() *Engine { return defaultEngine }
 
@@ -82,8 +95,11 @@ func (e *Engine) Apply(body []byte) ([]byte, Result) {
 		OriginalBytes: len(body),
 		SentBytes:     len(body), // fail-open default: untouched passthrough
 	}
-	// Fast bailout: if body has no tool messages or is too small, pass through instantly.
-	if len(body) < 256 || !bytes.Contains(body, []byte("tool")) {
+	// Fast bailout: if body has no tool messages, diffs or code fences, pass through instantly.
+	hasCandidate := bytes.Contains(body, []byte("tool")) ||
+		bytes.Contains(body, []byte("```")) ||
+		bytes.Contains(body, []byte("diff --git"))
+	if len(body) < 256 || !hasCandidate {
 		res.DurationMS = float64(time.Since(start).Microseconds()) / 1000.0
 		return body, res
 	}

@@ -22,6 +22,7 @@ type toolTarget struct {
 	startIndex int
 	rawLen     int
 	content    string
+	isUser     bool
 }
 
 // applyReplacements stitches original body and replacement slices into a new buffer.
@@ -62,7 +63,8 @@ func (e *Engine) processOpenAIChatFast(f profile.Family, body []byte, res Result
 	turn := 0
 	messages.ForEach(func(_, msg gjson.Result) bool {
 		turn++
-		if msg.Get("role").String() != "tool" {
+		role := msg.Get("role").String()
+		if role != "tool" && role != "user" {
 			return true
 		}
 		c := msg.Get("content")
@@ -72,6 +74,7 @@ func (e *Engine) processOpenAIChatFast(f profile.Family, body []byte, res Result
 				startIndex: c.Index,
 				rawLen:     len(c.Raw),
 				content:    c.String(),
+				isUser:     role == "user",
 			})
 		}
 		return true
@@ -81,21 +84,25 @@ func (e *Engine) processOpenAIChatFast(f profile.Family, body []byte, res Result
 		return body, res
 	}
 
-	// Cross-Turn Stale Read Deduplication
-	if len(targets) > 1 {
-		blocks := make([]distill.BlockRecord, len(targets))
-		for i, t := range targets {
-			blocks[i] = distill.BlockRecord{
+	// Cross-Turn Stale Read Deduplication (only for tool targets)
+	var toolBlocks []distill.BlockRecord
+	var toolIndices []int
+	for i, t := range targets {
+		if !t.isUser {
+			toolBlocks = append(toolBlocks, distill.BlockRecord{
 				TurnIndex: t.turnIndex,
 				Content:   t.content,
 				Hash:      distill.ComputeFastHash(t.content),
 				Ref:       distill.ComputeRef(t.content),
-			}
+			})
+			toolIndices = append(toolIndices, i)
 		}
-		deduped, changed := distill.DeduplicateHistoricalReads(blocks)
+	}
+	if len(toolBlocks) > 1 {
+		deduped, changed := distill.DeduplicateHistoricalReads(toolBlocks)
 		if changed {
-			for i := range targets {
-				targets[i].content = deduped[i]
+			for j, origIdx := range toolIndices {
+				targets[origIdx].content = deduped[j]
 			}
 		}
 	}
@@ -103,11 +110,18 @@ func (e *Engine) processOpenAIChatFast(f profile.Family, body []byte, res Result
 	var reps []replacement
 	for _, t := range targets {
 		before := e.memo.Len()
-		out := e.distillText(f, t.content)
-		if out == "" && strings.Contains(t.content, "[... squoze: earlier view") {
-			out = t.content // dedup reference marker
+		var out string
+		if t.isUser {
+			if distilled, ok := e.distillUserContent(f, t.content); ok {
+				out = distilled
+			}
+		} else {
+			out = e.distillText(f, t.content)
+			if out == "" && strings.Contains(t.content, "[... squoze: earlier view") {
+				out = t.content // dedup reference marker
+			}
 		}
-		if out != "" {
+		if out != "" && out != t.content {
 			rawJSON, err := json.Marshal(out)
 			if err == nil {
 				reps = append(reps, replacement{
