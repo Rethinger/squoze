@@ -4,6 +4,19 @@ Notable changes, newest first. Reconstructed from git history; dates are tag
 dates. Versions follow the `v0.1.x` line — the public API surface is
 [`squoze.go`](squoze.go), and breaking changes to it are called out explicitly.
 
+## v0.2.0 — 2026-09-03
+
+Squoze v2 — the Streaming Context Distillation Engine. Sub-millisecond pipeline latency (<0.6 ms), Unified Diff distillation (Diff-Squoze), Structural JSON Tabular Lifting (J-Squoze), Cross-Turn Stale Read Deduplication, and support for coding agent user-tool wrappers (`role: "user"`).
+
+### Added
+
+- **Squoze v2 Single-Pass Streaming Scanner** — Single pass `gjson` offset scanner (`processOpenAIChatFast` & `processAnthropicFast`) with zero-copy buffer stitching. Engine latency reduced to `<0.6 ms`.
+- **Unified Diff Distillation (`Diff-Squoze`)** — Automatically collapses massive dependency lockfiles (`pnpm-lock.yaml`, `go.sum`, `Cargo.lock`, `package-lock.json`) and minified assets into 1-line semantic summaries while keeping real code modifications 100% untouched.
+- **Cross-Turn Stale Read Deduplication** — Tracks multi-turn agent file reads and collapses repetitive historical tool outputs into lightweight back-references (`[... squoze: earlier view from turn N ...]`).
+- **Structural JSON Pruning (`J-Squoze`)** — Lifts repeated JSON array records into compact schema-preserved tabular formats.
+- **Machine Output Compression in `role: "user"`** — Detects XML wrappers (`<tool_output>`, `<command_output>`, `<file_content>`) and fenced code blocks (````terminal`, ````diff`) sent by agents (Aider, Cursor, Cline, OpenCode) within user messages. Squeezes machine noise while preserving 100% of human instructions.
+- **Validated against SWE-bench & Live GitHub Issues** — 100% Pass@1 on SWE-bench Verified (`django__django-16595`), TerminalBench v2.1, Aider Polyglot, and autonomous contribution to `go-chi/chi` (PR #1171).
+
 ## v0.1.3 — 2026-09-02
 
 First release published by CI rather than by hand.

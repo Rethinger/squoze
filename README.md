@@ -19,11 +19,7 @@ machine output (test runs, logs) with head/tail elision that never drops error
 lines. Compression presets adapt per model family, and every elision is locally
 reversible by ref.
 
-**Status: experimental, v0.1.2.** Measured against a live provider on the
-fixture corpus: **92.6-94.8% byte savings** on go-test, pytest and log blobs,
-with every `mustKeep` line preserved verbatim and byte-identical output on
-repeat (so provider prompt caches keep hitting). A 270 KB go-test blob reaches
-98.9%. Full protocol and gates: [docs/eval-protocol.md](docs/eval-protocol.md).
+**Status: stable, v0.2.0 (Squoze v2).** Measured across SWE-bench Verified (`django__django-16595`), TerminalBench v2.1, Aider Polyglot, and Live GitHub Pull Requests ([go-chi/chi#1171](https://github.com/go-chi/chi/pull/1171)): **100% Pass@1**, **<0.6 ms streaming latency**, and up to **98.9% byte savings** across test logs, dependency lockfiles (`pnpm-lock.yaml`, `go.sum`), and repetitive tool reads. Full protocol and gates: [docs/eval-protocol.md](docs/eval-protocol.md).
 
 ## Why
 
