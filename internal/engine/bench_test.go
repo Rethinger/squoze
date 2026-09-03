@@ -90,4 +90,3 @@ func BenchmarkPassthroughUnknownFormat(b *testing.B) {
 		sink, _ = e.Apply(body)
 	}
 }
-
