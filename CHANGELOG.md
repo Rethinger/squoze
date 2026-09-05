@@ -4,6 +4,113 @@ Notable changes, newest first. Reconstructed from git history; dates are tag
 dates. Versions follow the `v0.1.x` line — the public API surface is
 [`squoze.go`](squoze.go), and breaking changes to it are called out explicitly.
 
+## Unreleased
+
+Contract repair. The benchmark audit in the 2papi gateway
+(`2papi/docs/benchmark-audit.md`) ran v0.2.0 through a 15-case corpus and found
+that three of the five contracts this README advertises were not actually held,
+plus three further defects that surfaced while fixing them. Compression strength
+was never the problem — it measured *better* than claimed — so nothing here
+trades savings for correctness: median savings on the cases both versions
+compress moved 97.06% → 97.02%, and one case went 24.4% → 76.2%.
+
+No public API change: `squoze.NewEngine` and `Apply` keep their signatures.
+
+### Fixed
+
+- **Deterministic column order in tabular lifting.** `colKeys` was built by
+  ranging a Go map, so the same input produced up to 4 different table headers
+  across 12 fresh engines — which invalidates the provider prompt-cache prefix
+  every time a lifted table appears. Column order now follows the order the
+  producer used in the document (`sort.Strings` only as a fallback).
+- **Source code is passed through untouched.** `router.Kind` declared `KindCode`
+  but `Classify` never returned it, so a Go file dense in `FAILED`/`PASSED`
+  string literals was elided as if it were test output — 29159 → 4245 bytes of
+  syntactically broken source. A column-0 opener (`package`, `func`, `class`,
+  `#include`, `export …`) plus marker density now means "file", and the code
+  check runs *before* the test-output check: fixture generators and golden files
+  embed machine output verbatim, which is precisely why they used to trip it.
+- **Panic traces and compiler output are compressed at all.** Neither contains
+  `FAIL` or `PASS`, so both used to fall through to `KindProse` and were left
+  untouched. `panic:` / `goroutine N [running]:` / `fatal error:` and
+  `path/file.go:12:5: message` diagnostics now count as machine output.
+- **Cross-turn dedup replacements reach the request body.** The change guard
+  compared the deduped value against itself (`out != t.content`, where
+  `t.content` had already been rewritten by dedup), so the replacement was
+  silently discarded and the earlier turn was resent in full — +24914 bytes on a
+  4-turn session. `toolTarget` now keeps the body's original bytes separately.
+- **JSON envelope fields survive tabular lifting.** `has_more`, `object`,
+  counts and the wrapper key used to disappear with the array, so a model shown
+  800 rows had no way to know more pages existed.
+- **Failure lines dropped by `MaxKept` are disclosed.** At `MaxKept=50` and 200
+  failures, error-line recall was 8% and the marker said nothing about it. It
+  now carries `· N more failure lines over cap=50, see local copy`.
+- **Truncated table cells are disclosed.** `sanitizeCell` cuts at 80 chars; the
+  headline now reports `N cells truncated`, so savings that are really deletion
+  are visible as such.
+
+### Changed
+
+- **Dedup direction is inverted, and the marker text changed with it.** v0.2.0
+  kept the *latest* copy of a re-read file intact and rewrote the earlier ones.
+  That is backwards for prompt caching: the earlier bytes are the ones already
+  sent and already cached, so editing them discards the cached prefix from that
+  point on. The first copy is now the one that stays; later repeats collapse to
+
+  ```
+  [... squoze: identical to the copy in turn N above (B bytes) · ref R ...]
+  ```
+
+  replacing `[... squoze: earlier view from turn N ...]`. `N` is now the *first*
+  turn rather than the latest, so the marker stops changing as the session grows
+  — with the old form, collapsed history was rewritten on every subsequent turn.
+  **Anyone string-matching the old marker must update.**
+- **Tabular lifting requires ≥35% savings** (was 10%). Turning valid JSON into a
+  Markdown table is a type change; 10% did not justify it, and structural
+  pruning keeps the value parseable at the margin.
+- **Constant columns are hoisted out of the table.** A column whose value repeats
+  in every row is stated once in the headline (`· all rows: note=…`) instead of
+  800 times. A value that would have to be truncated is not hoisted — a clipped
+  value in the headline has nothing to disclose it.
+- **Dedup floor of 512 bytes.** Collapsing a 200-byte repeat into a 90-byte
+  marker is not a saving, and every such rewrite costs prefix.
+
+### Internal
+
+No behaviour change in this section — same verdicts, same output bytes.
+
+- **The router is now benchmarked directly.** `Classify` runs on every tool block
+  *before* any compression, so an untouched blob pays it too, yet
+  `internal/router` had no benchmarks at all. Each case pins the `Kind` it
+  expects before measuring, because a benchmark that quietly changes branch keeps
+  printing a number for the wrong thing — that pin is what found the item below.
+  Two readings worth keeping: the sampling cap holds (270 KB and 2700 KB cost the
+  same within noise), and `KindCode` is the *cheapest* full path, ~45% under
+  letting the same blob fall through to prose.
+- **No `json.Valid` call on prefixes that cannot be JSON.** `Classify` validates
+  a *truncated* 8 KB prefix, so every JSON tool result larger than that is
+  invalid by construction: the parse could only fail, and its cost was a full 8 KB
+  scan plus the `json.SyntaxError` the failure heap-allocates and nobody reads —
+  the one allocation left anywhere in the router. It now runs only when the
+  prefix closes with the bracket matching its opener, which cannot reject
+  anything `json.Valid` would have accepted (valid JSON always ends that way).
+  Measured: 41–49 µs saved per large JSON object result, 46–61 µs per array, and
+  the router is allocation-free on every branch (24 B → 0 B, 1 → 0 allocs,
+  p=0.002).
+
+  Note for anyone reading `Kind` in a fork: `KindJSON` is unreachable above 8 KB
+  and always has been. It is not observable — both engine call sites treat
+  `KindJSON` exactly as `KindProse`, and JSON distillation is offered to the body
+  earlier in the pipeline regardless — so making the branch reachable would mean
+  parsing JSON in full on the hot path for zero change in output. The
+  unreachability stays; only its cost is gone.
+
+### Notes
+
+Requirements, design and per-task acceptance (including the re-run commands for
+every number above) live in
+[`.kiro/specs/distill-contracts/`](.kiro/specs/distill-contracts/).
+
 ## v0.2.0 — 2026-09-03
 
 Squoze v2 — the Streaming Context Distillation Engine. Sub-millisecond pipeline latency (<0.6 ms), Unified Diff distillation (Diff-Squoze), Structural JSON Tabular Lifting (J-Squoze), Cross-Turn Stale Read Deduplication, and support for coding agent user-tool wrappers (`role: "user"`).

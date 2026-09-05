@@ -1,0 +1,30 @@
+goos: linux
+goarch: amd64
+pkg: github.com/Rethinger/squoze/internal/router
+cpu: AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx  
+BenchmarkJSONProbeSkipped/object_over_probe-8         	   28054	     44735 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/object_over_probe-8         	   29241	     45914 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/object_over_probe-8         	   27664	     45278 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/object_over_probe-8         	   28014	     43692 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/object_over_probe-8         	   30546	     40811 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/object_over_probe-8         	   27986	     47778 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/object_over_probe-8         	   30048	     49459 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/object_over_probe-8         	   28130	     47108 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/array_over_probe-8          	   24943	     53288 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/array_over_probe-8          	   22532	     55326 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/array_over_probe-8          	   24266	     47723 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/array_over_probe-8          	   22894	     46223 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/array_over_probe-8          	   22011	     49574 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/array_over_probe-8          	   24576	     56126 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/array_over_probe-8          	   22606	     60764 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeSkipped/array_over_probe-8          	   26319	     46723 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeKept-8                              	    4353	    318270 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeKept-8                              	    3738	    284862 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeKept-8                              	    4215	    380557 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeKept-8                              	    4168	    330854 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeKept-8                              	    3524	    288542 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeKept-8                              	    4345	    330996 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeKept-8                              	    3499	    322767 ns/op	      24 B/op	       1 allocs/op
+BenchmarkJSONProbeKept-8                              	    4011	    320850 ns/op	      24 B/op	       1 allocs/op
+PASS
+ok  	github.com/Rethinger/squoze/internal/router	38.472s

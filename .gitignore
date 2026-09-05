@@ -10,3 +10,6 @@ coverage.txt
 # Local data (never commit user originals)
 /originals.jsonl
 /data/
+
+# Benchstat intermediates (regenerated from old.txt/new.txt)
+/benchout/*.clean.txt

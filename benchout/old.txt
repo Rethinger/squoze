@@ -1,0 +1,91 @@
+go: downloading github.com/tidwall/gjson v1.17.3
+go: downloading github.com/tidwall/sjson v1.2.5
+go: downloading gopkg.in/yaml.v3 v3.0.1
+go: downloading github.com/tidwall/pretty v1.2.0
+go: downloading github.com/tidwall/match v1.1.1
+goos: linux
+goarch: amd64
+pkg: github.com/Rethinger/squoze/internal/engine
+cpu: AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx  
+BenchmarkApply10KB-8                  	    7011	    193692 ns/op	   76525 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    6535	    171750 ns/op	   76527 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    6697	    199149 ns/op	   76529 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    6690	    174446 ns/op	   76513 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    4857	    206124 ns/op	   76532 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    5910	    171424 ns/op	   76516 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    6790	    172116 ns/op	   76509 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    6975	    180297 ns/op	   76520 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    5546	    187789 ns/op	   76522 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    6264	    171771 ns/op	   76547 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    6736	    169482 ns/op	   76535 B/op	      27 allocs/op
+BenchmarkApply10KB-8                  	    6532	    194791 ns/op	   76543 B/op	      27 allocs/op
+BenchmarkApply270KB-8                 	     276	   4383790 ns/op	 1857028 B/op	      43 allocs/op
+BenchmarkApply270KB-8                 	     260	   4548101 ns/op	 1858873 B/op	      44 allocs/op
+BenchmarkApply270KB-8                 	     273	   4393855 ns/op	 1857454 B/op	      43 allocs/op
+BenchmarkApply270KB-8                 	     228	   4681743 ns/op	 1861985 B/op	      45 allocs/op
+BenchmarkApply270KB-8                 	     264	   4366708 ns/op	 1858996 B/op	      44 allocs/op
+BenchmarkApply270KB-8                 	     276	   4955578 ns/op	 1857528 B/op	      43 allocs/op
+BenchmarkApply270KB-8                 	     274	   4689609 ns/op	 1857490 B/op	      43 allocs/op
+BenchmarkApply270KB-8                 	     260	   4909883 ns/op	 1859068 B/op	      44 allocs/op
+BenchmarkApply270KB-8                 	     271	   4342442 ns/op	 1857240 B/op	      43 allocs/op
+BenchmarkApply270KB-8                 	     252	   4507120 ns/op	 1859913 B/op	      44 allocs/op
+BenchmarkApply270KB-8                 	     274	   4744977 ns/op	 1856660 B/op	      42 allocs/op
+BenchmarkApply270KB-8                 	     232	   4489136 ns/op	 1860284 B/op	      44 allocs/op
+BenchmarkMemoHit-8                    	     278	   4297897 ns/op	 1842093 B/op	      37 allocs/op
+BenchmarkMemoHit-8                    	     259	   4882940 ns/op	 1840995 B/op	      36 allocs/op
+BenchmarkMemoHit-8                    	     261	   4388903 ns/op	 1842833 B/op	      37 allocs/op
+BenchmarkMemoHit-8                    	     279	   4991605 ns/op	 1840951 B/op	      36 allocs/op
+BenchmarkMemoHit-8                    	     268	   4336127 ns/op	 1841803 B/op	      37 allocs/op
+BenchmarkMemoHit-8                    	     279	   4496739 ns/op	 1840470 B/op	      36 allocs/op
+BenchmarkMemoHit-8                    	     272	   4316187 ns/op	 1841749 B/op	      37 allocs/op
+BenchmarkMemoHit-8                    	     250	   4334946 ns/op	 1842438 B/op	      37 allocs/op
+BenchmarkMemoHit-8                    	     236	   4813125 ns/op	 1840257 B/op	      36 allocs/op
+BenchmarkMemoHit-8                    	     256	   4375488 ns/op	 1841704 B/op	      37 allocs/op
+BenchmarkMemoHit-8                    	     264	   4410238 ns/op	 1842559 B/op	      37 allocs/op
+BenchmarkMemoHit-8                    	     232	   4953638 ns/op	 1841068 B/op	      36 allocs/op
+BenchmarkApplyMultiMessage40-8        	     554	   2303491 ns/op	  822178 B/op	     502 allocs/op
+BenchmarkApplyMultiMessage40-8        	     567	   2224009 ns/op	  822153 B/op	     501 allocs/op
+BenchmarkApplyMultiMessage40-8        	     565	   2064881 ns/op	  822176 B/op	     502 allocs/op
+BenchmarkApplyMultiMessage40-8        	     594	   2230602 ns/op	  822188 B/op	     502 allocs/op
+BenchmarkApplyMultiMessage40-8        	     542	   2083356 ns/op	  822157 B/op	     501 allocs/op
+BenchmarkApplyMultiMessage40-8        	     588	   2029046 ns/op	  822158 B/op	     501 allocs/op
+BenchmarkApplyMultiMessage40-8        	     426	   2604033 ns/op	  822191 B/op	     502 allocs/op
+BenchmarkApplyMultiMessage40-8        	     561	   2017527 ns/op	  822183 B/op	     502 allocs/op
+BenchmarkApplyMultiMessage40-8        	     595	   2175410 ns/op	  822193 B/op	     502 allocs/op
+BenchmarkApplyMultiMessage40-8        	     608	   2019121 ns/op	  822180 B/op	     502 allocs/op
+BenchmarkApplyMultiMessage40-8        	     596	   2060151 ns/op	  822178 B/op	     502 allocs/op
+BenchmarkApplyMultiMessage40-8        	     526	   2098979 ns/op	  822210 B/op	     502 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  655722	      1616 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  653889	      1622 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  686986	      1744 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  669174	      1683 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  688204	      1892 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  590576	      1761 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  616838	      1644 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  658096	      1662 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  692395	      1821 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  690427	      1659 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  658089	      1703 ns/op	     352 B/op	       7 allocs/op
+BenchmarkPassthroughUnknownFormat-8   	  657657	      1640 ns/op	     352 B/op	       7 allocs/op
+PASS
+ok  	github.com/Rethinger/squoze/internal/engine	95.633s
+goos: linux
+goarch: amd64
+pkg: github.com/Rethinger/squoze/internal/proxy
+cpu: AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx  
+BenchmarkProxyRoundTrip-8   	     860	   1434735 ns/op	  158315 B/op	     296 allocs/op
+BenchmarkProxyRoundTrip-8   	     928	   1261147 ns/op	  158054 B/op	     295 allocs/op
+BenchmarkProxyRoundTrip-8   	     938	   1331350 ns/op	  159084 B/op	     296 allocs/op
+BenchmarkProxyRoundTrip-8   	     756	   1391424 ns/op	  158111 B/op	     295 allocs/op
+BenchmarkProxyRoundTrip-8   	     872	   1222187 ns/op	  159631 B/op	     296 allocs/op
+BenchmarkProxyRoundTrip-8   	     996	   1120440 ns/op	  157922 B/op	     296 allocs/op
+BenchmarkProxyRoundTrip-8   	     814	   1359150 ns/op	  159724 B/op	     297 allocs/op
+BenchmarkProxyRoundTrip-8   	    1041	   1113029 ns/op	  158768 B/op	     296 allocs/op
+BenchmarkProxyRoundTrip-8   	    1054	   1124285 ns/op	  158274 B/op	     296 allocs/op
+BenchmarkProxyRoundTrip-8   	    1029	   1327344 ns/op	  160394 B/op	     297 allocs/op
+BenchmarkProxyRoundTrip-8   	    1042	   1116210 ns/op	  158838 B/op	     296 allocs/op
+BenchmarkProxyRoundTrip-8   	    1014	   1341364 ns/op	  160134 B/op	     296 allocs/op
+PASS
+ok  	github.com/Rethinger/squoze/internal/proxy	16.767s
+PASS
+ok  	github.com/Rethinger/squoze/internal/router	0.005s

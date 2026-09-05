@@ -14,24 +14,84 @@ between your AI agent and any OpenAI/Anthropic-compatible provider and shrinks
 request bodies — without losing information the model needs, and without
 breaking provider prompt caches.
 
-squoze detects the wire format, classifies content blocks and squeezes verbose
-machine output (test runs, logs) with head/tail elision that never drops error
-lines. Compression presets adapt per model family, and every elision is locally
-reversible by ref.
+squoze detects the wire format, classifies every content block and squeezes
+verbose machine output (test runs, logs, CLI progress spam) with head/tail
+elision that never drops error lines. Prose, source code and JSON take
+different paths. Compression presets adapt per model family, and every elision
+is locally reversible by ref.
 
-**Status: stable, v0.2.0 (Squoze v2).** Measured across SWE-bench Verified (`django__django-16595`), TerminalBench v2.1, Aider Polyglot, and Live GitHub Pull Requests ([go-chi/chi#1171](https://github.com/go-chi/chi/pull/1171)): **100% Pass@1**, **<0.6 ms streaming latency**, and up to **98.9% byte savings** across test logs, dependency lockfiles (`pnpm-lock.yaml`, `go.sum`), and repetitive tool reads. Full protocol and gates: [docs/eval-protocol.md](docs/eval-protocol.md).
+## Status
+
+`v0.2.0` is the current tag. `main` additionally carries the contract repairs
+below, which are **not in any tag yet**.
+
+An external audit of v0.2.0 found that three of the contracts this README
+states were not in fact held: table column order was nondeterministic, source
+files could be elided as machine output, and already-sent history was rewritten
+on a later turn. All three are fixed on `main` and now pinned by tests, with
+savings unchanged — median 97.06% → 97.02% across the cases both versions
+compress. **The cross-turn dedup marker text changed**; if you match on it, read
+[CHANGELOG.md](CHANGELOG.md) before upgrading. Full detail, including how to
+re-run each number: [`.kiro/specs/distill-contracts/`](.kiro/specs/distill-contracts/).
 
 ## Why
 
 Agents waste most of their token budget on noise: repeated file reads, verbose
 CLI output, stale tool results. squoze removes the noise and keeps the signal —
-deterministically, with quality contracts:
+deterministically, under contracts that are tested rather than asserted:
 
-- **Fail-open** — any error means your request goes through untouched.
+- **Fail-open** — any error means the request goes through untouched.
 - **Never-elide** — errors, failures and stack traces are never compressed away.
-- **Cache-safe** — decisions are stable across turns so provider prompt caches
-  keep hitting (a 90% discount is worth more than a 20% squeeze).
+  Where a cap does force a drop, the marker says how many lines it dropped: a
+  silent loss is worse than a disclosed one.
+- **Cache-safe** — identical bytes always produce identical output, and bytes
+  already sent to the provider are never rewritten on a later turn. Both matter
+  for the same reason: a conversation reaches the provider as a growing prefix,
+  so one changed byte discards the cache from that position on (a 90% discount
+  is worth more than a 20% squeeze).
+- **Source-safe** — prose, source code and JSON are classified and routed, not
+  mutated. A file you are about to compile or diff comes out byte-identical.
+- **Disclosed** — every lossy step reports itself in the marker it leaves:
+  dropped failure lines, truncated table cells, hoisted constant columns.
 - **Reversible** — originals stay local; the model can pull them back on demand.
+
+## Measured
+
+Two levels, defined in [docs/eval-protocol.md](docs/eval-protocol.md).
+
+**Level 1 — deterministic fixtures, every commit.** `go test ./internal/eval -v`:
+
+| Fixture | Bytes | Saved | Contract |
+|---|---:|---:|---|
+| `go_test_600` | 39 156 → 2 983 | 92.4% | every `FAIL` line kept |
+| `pytest_verbose` | 24 385 → 3 174 | 87.0% | every `FAILED` / `E ` line kept |
+| `server_logs_errors` | 30 111 → 1 756 | 94.2% | every `ERROR` line kept |
+
+A violated contract is a red test, not a footnote.
+
+**A 15-case corpus lives in the consumer repo** and grades needle recall,
+idempotency, determinism and cross-turn prefix stability as well as savings.
+Head of `main`, one run per case:
+
+```
+15 cases · 14 pass · 0 fail · 1 known-limit
+compression fired on 9/15 · median savings when it fired: 97.02%
+worst-case p95 engine latency: 5.95 ms · needle recall 100% (except the
+  disclosed MaxKept known-limit) · prefix-stable on every turn pair
+```
+
+```sh
+git clone https://github.com/Rethinger/2papi && cd 2papi
+go run ./test/squozebench          # writes test/results/squoze_quality_report.json
+cat test/squozebench/repro/README.md   # A/B against a released squoze
+```
+
+**Not measured: answer quality against a live model.** Level 2 of the protocol
+(LoCoMo, RULER, BFCL v3 through a real provider, gate Δaccuracy ≤ 2 pp) is
+specified but has not been run. Until it is, squoze makes no claim about task
+success rate, Pass@1 or benchmark scores — earlier revisions of this README
+quoted such figures from fixtures that could not support them, and that was
+wrong. Savings, latency and the contracts above are what the numbers here cover.
 
 ## Install
 
@@ -61,8 +121,8 @@ squoze livecheck
 squoze oc
 ```
 
-Every response carries `X-Squoze-Original-Bytes`, `X-Squoze-Sent-Bytes` and
-`X-Squoze-Format`.
+Every response carries `X-Squoze-Original-Bytes`, `X-Squoze-Sent-Bytes`,
+`X-Squoze-Format` and `X-Squoze-Upstream`.
 
 ## Use as a library
 
@@ -83,9 +143,10 @@ optimization mode.
 
 ```sh
 go build ./...
-go test ./...                # unit + quality contracts
-go test ./internal/eval -v   # was→is savings table
+go test ./...                # unit tests + quality contracts
+go test ./internal/eval -v   # the was → is savings table above
 ```
 
 Apache-2.0. Pending work is tracked honestly in
-[docs/UNFINISHED.md](docs/UNFINISHED.md).
+[docs/UNFINISHED.md](docs/UNFINISHED.md); released changes in
+[CHANGELOG.md](CHANGELOG.md).

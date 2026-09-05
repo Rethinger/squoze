@@ -1,0 +1,47 @@
+go: downloading golang.org/x/perf v0.0.0-20260825160852-19be9d8e6c70
+go: downloading github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
+goos: linux
+goarch: amd64
+pkg: github.com/Rethinger/squoze/internal/engine
+cpu: AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx  
+                           │ old.clean.txt │            new.clean.txt            │
+                           │    sec/op     │    sec/op     vs base               │
+Apply10KB-8                   177.4µ ± 10%   174.9µ ± 12%       ~ (p=0.671 n=12)
+Apply270KB-8                  4.528m ±  5%   4.270m ±  4%  -5.70% (p=0.004 n=12)
+MemoHit-8                     4.400m ± 11%   4.172m ±  3%  -5.18% (p=0.000 n=12)
+ApplyMultiMessage40-8         2.091m ±  7%   2.232m ±  3%  +6.74% (p=0.045 n=12)
+PassthroughUnknownFormat-8    1.673µ ±  5%   1.665µ ±  4%       ~ (p=0.505 n=12)
+geomean                       415.3µ         409.9µ        -1.30%
+
+                           │ old.clean.txt │             new.clean.txt             │
+                           │     B/op      │     B/op      vs base                 │
+Apply10KB-8                   74.73Ki ± 0%   74.77Ki ± 0%  +0.05% (p=0.000 n=12)
+Apply270KB-8                  1.772Mi ± 0%   1.772Mi ± 0%       ~ (p=0.977 n=12)
+MemoHit-8                     1.756Mi ± 0%   1.757Mi ± 0%       ~ (p=0.160 n=12)
+ApplyMultiMessage40-8         802.9Ki ± 0%   818.8Ki ± 0%  +1.98% (p=0.000 n=12)
+PassthroughUnknownFormat-8      352.0 ± 0%     352.0 ± 0%       ~ (p=1.000 n=12) ¹
+geomean                       146.4Ki        147.0Ki       +0.41%
+¹ all samples are equal
+
+                           │ old.clean.txt │            new.clean.txt             │
+                           │   allocs/op   │ allocs/op   vs base                  │
+Apply10KB-8                     27.00 ± 0%   27.00 ± 0%        ~ (p=1.000 n=12) ¹
+Apply270KB-8                    43.50 ± 1%   51.00 ± 2%  +17.24% (p=0.000 n=12)
+MemoHit-8                       37.00 ± 3%   37.00 ± 0%        ~ (p=0.246 n=12)
+ApplyMultiMessage40-8           502.0 ± 0%   511.0 ± 0%   +1.79% (p=0.000 n=12)
+PassthroughUnknownFormat-8      7.000 ± 0%   7.000 ± 0%        ~ (p=1.000 n=12) ¹
+geomean                         43.33        44.89        +3.60%
+¹ all samples are equal
+
+pkg: github.com/Rethinger/squoze/internal/proxy
+                 │ old.clean.txt │         new.clean.txt          │
+                 │    sec/op     │    sec/op     vs base          │
+ProxyRoundTrip-8    1.294m ± 13%   1.339m ± 16%  ~ (p=0.198 n=12)
+
+                 │ old.clean.txt │         new.clean.txt          │
+                 │     B/op      │     B/op      vs base          │
+ProxyRoundTrip-8    155.1Ki ± 1%   155.4Ki ± 0%  ~ (p=0.242 n=12)
+
+                 │ old.clean.txt │        new.clean.txt         │
+                 │   allocs/op   │ allocs/op   vs base          │
+ProxyRoundTrip-8      296.0 ± 0%   296.0 ± 0%  ~ (p=0.690 n=12)

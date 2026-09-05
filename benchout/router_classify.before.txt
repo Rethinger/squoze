@@ -1,0 +1,72 @@
+goos: linux
+goarch: amd64
+pkg: github.com/Rethinger/squoze/internal/router
+cpu: AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx  
+BenchmarkClassify/code-8     	    2794	    365308 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/code-8     	    3339	    399992 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/code-8     	    3432	    396176 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/code-8     	    3308	    392444 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/code-8     	    3482	    391882 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/code-8     	    3586	    391312 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/test_output-8         	    1892	    667265 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/test_output-8         	    1770	    626698 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/test_output-8         	    1722	    745399 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/test_output-8         	    1587	    673248 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/test_output-8         	    2008	    666495 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/test_output-8         	    2005	    664586 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/build_diagnostics-8   	    2119	    558894 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/build_diagnostics-8   	    2382	    541322 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/build_diagnostics-8   	    1880	    535347 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/build_diagnostics-8   	    2372	    610703 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/build_diagnostics-8   	    2430	    556071 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/build_diagnostics-8   	    2464	    557710 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/log-8                 	    1800	    732217 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/log-8                 	    1789	    762350 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/log-8                 	    1818	    740992 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/log-8                 	    1653	    727200 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/log-8                 	    1551	    704354 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/log-8                 	    1387	    731574 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose-8               	    1940	    698542 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose-8               	    1639	    696603 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose-8               	    1869	    692274 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose-8               	    1516	    716520 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose-8               	    1774	    704124 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose-8               	    1896	    711032 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose_code_words-8    	    1912	    818339 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose_code_words-8    	    1773	    719113 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose_code_words-8    	    1886	    716825 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose_code_words-8    	    1719	    723708 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose_code_words-8    	    1510	    682989 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/prose_code_words-8    	    1687	    730801 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/json_within_probe-8   	   35786	     36132 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/json_within_probe-8   	   35672	     37275 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/json_within_probe-8   	   37084	     38066 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/json_within_probe-8   	   31723	     36123 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/json_within_probe-8   	   31449	     35447 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/json_within_probe-8   	   35478	     36409 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassify/json_over_probe-8     	    2838	    461480 ns/op	      24 B/op	       1 allocs/op
+BenchmarkClassify/json_over_probe-8     	    3063	    439886 ns/op	      24 B/op	       1 allocs/op
+BenchmarkClassify/json_over_probe-8     	    3009	    441739 ns/op	      24 B/op	       1 allocs/op
+BenchmarkClassify/json_over_probe-8     	    3132	    433821 ns/op	      24 B/op	       1 allocs/op
+BenchmarkClassify/json_over_probe-8     	    3003	    438770 ns/op	      24 B/op	       1 allocs/op
+BenchmarkClassify/json_over_probe-8     	    3054	    442667 ns/op	      24 B/op	       1 allocs/op
+BenchmarkClassifyScaling/8KB-8          	   17848	     72259 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/8KB-8          	   17112	     72569 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/8KB-8          	   14829	     74766 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/8KB-8          	   16573	     71257 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/8KB-8          	   18381	     70707 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/8KB-8          	   16150	     68170 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/270KB-8        	    1950	    684607 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/270KB-8        	    1891	    704997 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/270KB-8        	    1908	    776433 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/270KB-8        	    1290	    806032 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/270KB-8        	    1868	    711840 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/270KB-8        	    1848	    673027 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/2700KB-8       	    1839	    741774 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/2700KB-8       	    1954	    705656 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/2700KB-8       	    1936	    695480 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/2700KB-8       	    1918	    693470 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/2700KB-8       	    1952	    698541 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassifyScaling/2700KB-8       	    1818	    705775 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/Rethinger/squoze/internal/router	96.789s
