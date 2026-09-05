@@ -1,10 +1,11 @@
 # Changelog — squoze
 
 Notable changes, newest first. Reconstructed from git history; dates are tag
-dates. Versions follow the `v0.1.x` line — the public API surface is
-[`squoze.go`](squoze.go), and breaking changes to it are called out explicitly.
+dates. The public API surface is [`squoze.go`](squoze.go); on the `0.y.z` line
+the minor bumps for anything a caller can observe, and breaking changes are
+called out explicitly.
 
-## Unreleased
+## v0.3.0 — 2026-09-05
 
 Contract repair. The benchmark audit in the 2papi gateway
 (`2papi/docs/benchmark-audit.md`) ran v0.2.0 through a 15-case corpus and found
@@ -14,7 +15,10 @@ was never the problem — it measured *better* than claimed — so nothing here
 trades savings for correctness: median savings on the cases both versions
 compress moved 97.06% → 97.02%, and one case went 24.4% → 76.2%.
 
-No public API change: `squoze.NewEngine` and `Apply` keep their signatures.
+No public API change: `squoze.NewEngine` and `Apply` keep their signatures. It
+is still a minor bump, not a patch: the dedup marker text and direction, the
+tabular threshold and the new dedup floor are all observable in the output, and
+anything a caller can string-match on is part of the contract.
 
 ### Fixed
 
@@ -122,7 +126,14 @@ Squoze v2 — the Streaming Context Distillation Engine. Sub-millisecond pipelin
 - **Cross-Turn Stale Read Deduplication** — Tracks multi-turn agent file reads and collapses repetitive historical tool outputs into lightweight back-references (`[... squoze: earlier view from turn N ...]`).
 - **Structural JSON Pruning (`J-Squoze`)** — Lifts repeated JSON array records into compact schema-preserved tabular formats.
 - **Machine Output Compression in `role: "user"`** — Detects XML wrappers (`<tool_output>`, `<command_output>`, `<file_content>`) and fenced code blocks (````terminal`, ````diff`) sent by agents (Aider, Cursor, Cline, OpenCode) within user messages. Squeezes machine noise while preserving 100% of human instructions.
-- **Validated against SWE-bench & Live GitHub Issues** — 100% Pass@1 on SWE-bench Verified (`django__django-16595`), TerminalBench v2.1, Aider Polyglot, and autonomous contribution to `go-chi/chi` (PR #1171).
+- ~~**Validated against SWE-bench & Live GitHub Issues** — 100% Pass@1 on
+  SWE-bench Verified (`django__django-16595`), TerminalBench v2.1, Aider
+  Polyglot, and autonomous contribution to `go-chi/chi` (PR #1171).~~
+  **Retracted 2026-09-05.** Those suites graded by substring-matching fixture
+  replies and the instance IDs were not upstream SWE-bench instances, so the
+  numbers described the harness, not the engine. Nothing was re-scored to
+  replace them: what the corpus does measure is in the README, and the audit
+  that disproved these is `2papi/docs/benchmark-audit.md`.
 
 ## v0.1.3 — 2026-09-02
 
@@ -217,7 +228,9 @@ First tagged release: Apache-2.0 LICENSE, CI workflow (ubuntu + windows),
 - **Deterministic quality-fixture eval harness** with benchmarks and an
   external-eval protocol document.
 
-## Unreleased
+## Pending work
+
+Not a release section, which is why it sorts below the oldest tag.
 
 Pending work is tracked in [docs/UNFINISHED.md](docs/UNFINISHED.md) — notably the
 unsigned-binary Windows Defender false positive, the L2 evaluation, and

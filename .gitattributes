@@ -4,3 +4,11 @@
 # carriage return, so pin LF regardless of the cloning platform.
 *.sh    text eol=lf
 *.mjs   text eol=lf
+
+# Go sources are LF in the object store; without this a Windows clone checks
+# them out CRLF, and `gofmt -l .` inside a Linux container then flags every file
+# on the carriage returns alone — a false CI signal on the local pre-push check.
+*.go    text eol=lf
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
