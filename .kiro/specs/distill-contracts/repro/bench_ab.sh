@@ -3,7 +3,7 @@
 # Нужен golang:1.26 — benchstat требует Go >= 1.26.
 #
 #   MSYS_NO_PATHCONV=1 docker run --rm \
-#     -v "C:/Users/rethi/Documents/Projects/squoze:/w" -w /w golang:1.26 \
+#     -v "$PWD:/w" -w /w golang:1.26 \
 #     sh /w/.kiro/specs/distill-contracts/repro/bench_ab.sh
 #
 # N=<reps> переопределяет число прогонов (по умолчанию 12).

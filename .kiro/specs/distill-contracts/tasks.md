@@ -27,7 +27,7 @@ Status: TSK-001..015 complete · Created 2026-09-04 · Updated 2026-09-05
     FR-2/AC-2.2 («ниже порога → остаётся JSON») соблюдено; изменилось не правило,
     а сам кейс. Следствие: харнесс 2papi грейдит его `format-safety FAIL`, потому
     что кейс одновременно объявлен `Format: FormatJSON` и `Expect: ExpectEither`
-    — конфликт ожиданий в корпусе 2papi, решается там (см. «Открытый вопрос»).
+    — конфликт ожиданий в корпусе 2papi, решён там (см. «Закрытый вопрос»).
 
 ## Фаза 2 — стабильность префикса
 
@@ -216,7 +216,7 @@ TSK-001..006, TSK-011, TSK-012 независимы между собой и м�
 ## Приёмка NFR (TSK-009)
 
 Замер: базовая линия — релиз `github.com/Rethinger/squoze v0.2.0` из прокси-кэша;
-head — рабочее дерево `C:\Users\rethi\Documents\Projects\squoze` через
+head — рабочее дерево этого репозитория через
 `go mod edit -replace`. Обе версии прогнаны одним и тем же харнессом
 `2papi/test/squozebench` по 3 раза.
 
@@ -270,7 +270,7 @@ head лежит внутри разброса самой базы.
 
 ```sh
 S=/w/.kiro/specs/distill-contracts/repro
-Z=C:/Users/rethi/Documents/Projects/squoze
+Z=/abs/path/to/squoze
 
 # юниты + vet squoze (12 пакетов)
 MSYS_NO_PATHCONV=1 docker run --rm -v "$Z:/w" -w /w golang:1.23 sh $S/unit_tests.sh ./...
@@ -286,22 +286,32 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$Z:/w" -w /w golang:1.26 sh $S/bench_ab.s
 он же считает знаменатель NFR-4:
 
 ```sh
-MSYS_NO_PATHCONV=1 docker run --rm   -v "C:/Users/rethi/Documents/Projects/2papi:/w"   -v "C:/Users/rethi/Documents/Projects/squoze:/squoze" golang:1.23 sh /w/test/squozebench/repro/savings_ab.sh
+MSYS_NO_PATHCONV=1 docker run --rm   -v "/abs/path/to/2papi:/w"   -v "/abs/path/to/squoze:/squoze" golang:1.23 sh /w/test/squozebench/repro/savings_ab.sh
 node test/squozebench/repro/cmp_savings.mjs   # знаменатель — только Touched
 ```
 
-## Открытый вопрос (решается в 2papi, не здесь)
+## Закрытый вопрос — грейдинг `json_api_list_800_rows` (решён в 2papi)
 
-`json_api_list_800_rows` остаётся единственным FAIL:
-`format contract violated: output is not parseable JSON`. Кейс в
-`2papi/test/squozebench/corpus.go` объявлен сразу `Expect: ExpectEither`
-(«трогать можно») и `Format: FormatJSON` («выход обязан парситься») — после
-того как подъём в таблицу стал ожидаемым преобразованием, эти два условия
-несовместимы. Проба head: 104724 → 24889 Б (76.2%), конверт (`has_more`,
-`object`) сохранён, постоянная колонка `note` вынесена один раз вместо 800.
-То есть FAIL грейдится не за потерю данных, а за смену типа. Решение — за
-владельцем корпуса; вариант, который я предлагаю: для JSON-содержимого
-tool-сообщений грейдить «структура сохранена» (поля конверта на месте,
-детерминизм, раскрытие обрезки), а `FormatJSON` как жёсткий контракт
-оставить там, где выход действительно кто-то парсит — например, кейс с diff,
-который может быть применён.
+Кейс был объявлен сразу `Expect: ExpectEither` («трогать можно») и
+`Format: FormatJSON` («выход обязан парситься»). После того как подъём в таблицу
+стал ожидаемым преобразованием, эти два условия стали несовместимы, и харнесс
+2papi выдавал `format contract violated: output is not parseable JSON` — FAIL за
+смену типа, а не за потерю данных.
+
+Владелец корпуса принял предложенный здесь вариант (2papi TSK-011): жёсткий
+`FormatJSON` снят с этого кейса и оставлен там, где выход кто-то действительно
+парсит (кейс с diff, который должен применяться), а вместо формата грейдится
+сохранность структуры. Конкретно в `2papi/test/squozebench/corpus.go`:
+
+- `Class: "must-not-touch"` → `Class: "structured-data"`, ожидание одно —
+  `Expect: ExpectEither`;
+- `MustKeep: ["has_more", "next_cursor", "total_count"]` — поля конверта
+  проверяются как needles наравне со строками ошибок;
+- фикстура расширена этими полями, а `TestJSONEnvelopeLoss` в `verify_test.go`
+  пинит то же свойство со стороны теста.
+
+Бар не понижен, а перенесён: `format-invalid` в `cmp_savings.mjs` теперь пуст,
+зато `v0.2.0` падает на этом кейсе по `never-elide` (recall 0/3, теряются все
+три поля) в каждом прогоне — регрессия зафиксирована, а не просто отсутствует.
+Head: 104 724 → 24 889 Б (76.2% байт, 63.7% токенов), конверт цел, постоянная
+колонка `note` вынесена один раз вместо 800.

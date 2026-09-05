@@ -2,7 +2,7 @@
 # Бенчмарки роутера (TSK-014) и цена, снятая гардом FR-8 (TSK-015).
 #
 #   MSYS_NO_PATHCONV=1 docker run --rm \
-#     -v "C:/Users/rethi/Documents/Projects/squoze:/w" -w /w golang:1.23 \
+#     -v "$PWD:/w" -w /w golang:1.23 \
 #     sh /w/.kiro/specs/distill-contracts/repro/router_bench.sh
 #
 # Пишет benchout/router_classify.txt и benchout/router_json_probe.txt.

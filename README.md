@@ -71,14 +71,20 @@ A violated contract is a red test, not a footnote.
 
 **A 15-case corpus lives in the consumer repo** and grades needle recall,
 idempotency, determinism and cross-turn prefix stability as well as savings.
-Head of `main`, one run per case:
+Head of `main`, three runs of the corpus:
 
 ```
 15 cases · 14 pass · 0 fail · 1 known-limit
 compression fired on 9/15 · median savings when it fired: 97.02%
-worst-case p95 engine latency: 5.95 ms · needle recall 100% (except the
-  disclosed MaxKept known-limit) · prefix-stable on every turn pair
+worst-case p95 engine latency: 5.6-6.5 ms across the three runs
+needle recall 100% (except the disclosed MaxKept known-limit)
+prefix-stable on every turn pair
 ```
+
+The same corpus on `v0.2.0` scores 11 pass · 3 fail: the three failures are the
+contract bugs listed above. One repeat spiked to 14.9 ms on a single case under
+host contention from parallel container runs; it is measurement noise, not a
+second code path, and it is left in the reports rather than dropped.
 
 ```sh
 git clone https://github.com/Rethinger/2papi && cd 2papi

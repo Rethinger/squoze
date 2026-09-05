@@ -2,7 +2,7 @@
 # Юниты + vet всего модуля. Аргументы уходят в go test как есть.
 #
 #   MSYS_NO_PATHCONV=1 docker run --rm \
-#     -v "C:/Users/rethi/Documents/Projects/squoze:/w" -w /w golang:1.23 \
+#     -v "$PWD:/w" -w /w golang:1.23 \
 #     sh /w/.kiro/specs/distill-contracts/repro/unit_tests.sh ./...
 #
 # MSYS_NO_PATHCONV=1 обязателен из Git Bash: иначе "C:\...:/w" превращается
