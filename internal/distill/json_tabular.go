@@ -26,9 +26,24 @@ const tabularMinSavings = 0.35
 //
 // Determinism: identical input bytes always produce identical output bytes.
 // Column order comes from the document, never from Go map iteration.
-func DistillJSON(s string) (string, bool) {
+func DistillJSON(s string) (string, bool) { return distillJSON(s, true) }
+
+// distillJSON is DistillJSON with the pre-scan switchable, which is how the
+// output-neutrality contract is tested rather than asserted: TestPrescanIsOutputNeutral
+// runs both settings over the corpus and requires byte equality. The gate is
+// only ever allowed to skip work that could not have changed the result.
+func distillJSON(s string, gate bool) (string, bool) {
 	trimmed := strings.TrimSpace(s)
 	if len(trimmed) < 64 || (trimmed[0] != '{' && trimmed[0] != '[') {
+		return s, false
+	}
+
+	// Pre-scan on the raw bytes. json.Unmarshal is the expensive step and it is
+	// pure waste when neither transform can apply; the scan is a necessary
+	// condition for both, so rejecting here cannot change output. json_prescan.go
+	// carries the measurements and the reasoning.
+	keys, liftable := FindLiftableArray(trimmed)
+	if gate && !liftable && !hasPrunableFeature(trimmed) {
 		return s, false
 	}
 
@@ -40,7 +55,7 @@ func DistillJSON(s string) (string, bool) {
 	// 1. Try Tabular Schema-Lifting if it's an array of objects.
 	// Requires substantial savings: below the bar we keep the value parseable
 	// and fall through to structural pruning instead.
-	if tbl, ok := tryTabularLifting(parsed, trimmed); ok {
+	if tbl, ok := tryTabularLifting(parsed, trimmed, keys, liftable); ok {
 		if float64(len(tbl)) <= float64(len(s))*(1-tabularMinSavings) {
 			return tbl, true
 		}
@@ -127,28 +142,32 @@ func isEmptyCollection(v any) bool {
 // compact Markdown table. raw is the trimmed original JSON, used to recover the
 // document's own key order (Go map iteration is randomised, which would make the
 // output non-deterministic and defeat provider prompt caches).
-func tryTabularLifting(v any, raw string) (string, bool) {
-	var items []any
-	arrayPath := "@this"         // gjson path to the lifted array
-	var envelope []envelopeField // scalar siblings of a wrapped array
-
-	switch val := v.(type) {
-	case []any:
-		items = val
-	case map[string]any:
-		// Check common list wrappers: "items", "data", "results", "records"
-		for _, key := range []string{"items", "data", "results", "records"} {
-			if arr, ok := val[key].([]any); ok && len(arr) >= 3 {
-				items = arr
-				arrayPath = key
-				envelope = scalarSiblings(raw, key)
-				break
-			}
-		}
-	}
-
-	if len(items) < 3 {
+//
+// keys and liftable arrive from FindLiftableArray, which searched the raw bytes
+// before anything was unmarshalled: keys addresses the array to lift, empty
+// meaning the document root is itself the array.
+func tryTabularLifting(v any, raw string, keys []string, liftable bool) (string, bool) {
+	if !liftable {
 		return "", false
+	}
+	items, found := arrayAt(v, keys)
+	if !found || len(items) < 3 {
+		return "", false
+	}
+	arrayPath := gjsonPath(keys) // gjson path to the lifted array
+	label := arrayLabel(keys)    // the same path, as the headline prints it
+
+	// Scalar siblings of a wrapped array — the envelope. For a nested array they
+	// come from the parent object rather than the document root: has_more sitting
+	// next to the array is what a model needs, while a root-level field two
+	// levels up describes something else entirely.
+	var envelope []envelopeField
+	if len(keys) > 0 {
+		parentRaw := raw
+		if len(keys) > 1 {
+			parentRaw = gjson.Get(raw, gjsonPath(keys[:len(keys)-1])).Raw
+		}
+		envelope = scalarSiblings(parentRaw, keys[len(keys)-1])
 	}
 
 	// Verify all items are maps with scalar values
@@ -195,7 +214,7 @@ func tryTabularLifting(v any, raw string) (string, bool) {
 	if len(colKeys) == 0 {
 		// Every column was constant, so there is no table left to draw — the
 		// rows differ in nothing and the headline already carries all of it.
-		return tableHeadline(len(items), arrayPath, envelope, 0, constant), true
+		return tableHeadline(len(items), label, envelope, 0, constant), true
 	}
 
 	// Rows first, headline second: the headline has to report how many cells
@@ -227,7 +246,7 @@ func tryTabularLifting(v any, raw string) (string, bool) {
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(tableHeadline(len(items), arrayPath, envelope, truncated, constant))
+	buf.WriteString(tableHeadline(len(items), label, envelope, truncated, constant))
 	buf.Write(rows.Bytes())
 	return buf.String(), true
 }
@@ -382,11 +401,11 @@ func orderedColumns(raw, arrayPath string, wanted map[string]bool) []string {
 
 // tableHeadline renders the marker line above a lifted table, carrying the row
 // count, which key the rows came from, and the preserved envelope fields.
-func tableHeadline(rows int, arrayPath string, envelope []envelopeField, truncated int, constant []envelopeField) string {
+func tableHeadline(rows int, label string, envelope []envelopeField, truncated int, constant []envelopeField) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("[... squoze table: %d rows", rows))
-	if arrayPath != "@this" {
-		b.WriteString(fmt.Sprintf(" · from %q", arrayPath))
+	if label != "" {
+		b.WriteString(fmt.Sprintf(" · from %q", label))
 	}
 	for _, f := range envelope {
 		b.WriteString(fmt.Sprintf(" · %s=%s", f.Key, f.Val))

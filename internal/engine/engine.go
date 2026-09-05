@@ -28,7 +28,7 @@ import (
 )
 
 // Version is reported by `squoze version` and stamped into response headers.
-const Version = "0.3.0"
+const Version = "0.4.0"
 
 // Result describes one processed request body.
 type Result struct {
@@ -41,12 +41,25 @@ type Result struct {
 	MemoHits       int // blocks served byte-identical from the decision memo
 	Transforms     []string
 	DurationMS     float64
+
+	// Skipped is set when the request came back untouched without being
+	// examined, which today means one thing: it was larger than
+	// Limits.MaxBodyBytes. A request that was examined and simply had nothing
+	// worth squeezing is not "skipped" — it reports SavedBytes 0 instead.
+	Skipped    bool
+	SkipReason string // one of the Skip* constants; "" unless Skipped
 }
 
 // Engine is the pipeline with its cache-guard state attached.
 type Engine struct {
 	memo *store.Memo
 	orig *store.Originals
+	lim  Limits
+
+	// prescanOff disables canDistill. It exists so output-neutrality can be
+	// tested rather than asserted (see prescan_test.go); nothing outside this
+	// package can set it, and no production path does.
+	prescanOff bool
 }
 
 // DefaultMemoCapacity bounds pinned decisions per process (~4k blobs).
@@ -58,6 +71,15 @@ var defaultEngine = NewEngine(DefaultMemoCapacity)
 // NewEngine returns an isolated pipeline instance with memory-only originals.
 func NewEngine(memoCapacity int) *Engine {
 	return NewEngineWith(memoCapacity, store.NewOriginals())
+}
+
+// NewEngineWithLimits returns an isolated instance bounded by lim. The zero
+// Limits is v0.3.0 behaviour, so NewEngine(cap) and
+// NewEngineWithLimits(cap, Limits{}) are interchangeable.
+func NewEngineWithLimits(memoCapacity int, lim Limits) *Engine {
+	e := NewEngineWith(memoCapacity, store.NewOriginals())
+	e.lim = lim
+	return e
 }
 
 // NewEngineWith attaches an external originals store (e.g. persisted).
@@ -90,6 +112,18 @@ func Process(body []byte) ([]byte, Result) {
 // byte-for-byte (fail-open).
 func (e *Engine) Apply(body []byte) ([]byte, Result) {
 	start := time.Now()
+	// Body cap first, ahead of wire.Detect: detection unmarshals the body into a
+	// probe struct, so it walks every byte. Above the cap we promise not to
+	// look, and Format stays "unknown" because we did not read enough to know.
+	if m := e.lim.MaxBodyBytes; m > 0 && len(body) > m {
+		return body, Result{
+			OriginalBytes: len(body),
+			SentBytes:     len(body),
+			Skipped:       true,
+			SkipReason:    SkipBodyTooLarge,
+			DurationMS:    float64(time.Since(start).Microseconds()) / 1000.0,
+		}
+	}
 	res := Result{
 		Format:        wire.Detect(body),
 		OriginalBytes: len(body),
@@ -125,6 +159,9 @@ func (e *Engine) Apply(body []byte) ([]byte, Result) {
 // model family so pinned decisions never leak across providers. Returns ""
 // when the blob must not be touched or was rejected after compression.
 func (e *Engine) squeezeText(f profile.Family, s string) string {
+	if e.blockOutOfBounds(len(s)) {
+		return ""
+	}
 	switch router.Classify(s) {
 	case router.KindTestOutput, router.KindLogOutput:
 	default:
@@ -155,12 +192,21 @@ func (e *Engine) squeezeText(f profile.Family, s string) string {
 // 5. Pass 4: Generic Terminal & ANSI Sanitization
 func (e *Engine) distillText(f profile.Family, s string) string {
 	params := profile.ParamsFor(f)
-	if len(s) < 64 {
+	if len(s) < e.minBlock() || e.blockTooLarge(len(s)) {
 		return ""
 	}
 	key := []byte(f.String() + "\x00" + s)
 	if out, ok := e.memo.Get(key); ok {
 		return string(out)
+	}
+
+	// Structural pre-scan, deliberately after the memo lookup and not before
+	// it. A memo hit is a pinned decision from an earlier turn: cheap to serve
+	// and the whole point of the cache guard. Gating ahead of it could hand
+	// back the original bytes for a block an earlier turn had already
+	// rewritten, which is exactly the prefix break the memo exists to prevent.
+	if !e.prescanOff && !canDistill(s) {
+		return ""
 	}
 
 	orig := s

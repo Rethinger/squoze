@@ -92,6 +92,30 @@ go run ./test/squozebench          # writes test/results/squoze_quality_report.j
 cat test/squozebench/repro/README.md   # A/B against a released squoze
 ```
 
+**Level 1b — the work guard, `v0.4.0`.** Deciding "this body has nothing to
+compress" used to cost a full `json.Unmarshal`; it is now answered from the raw
+bytes. `prescan=false` is literally the v0.3.0 path, so the two arms are a
+release comparison:
+
+| Shape | v0.3.0 | v0.4.0 | Δ | Allocations |
+|---|---:|---:|---:|---|
+| 140 KB object of objects | 5.077 ms | 0.847 ms | **−83%** | 23 835 → **0** |
+| 560 KB object of objects | 26.371 ms | 3.115 ms | **−88%** | 95 274 → **0** |
+| 140 KB array of scalars | 6.197 ms | 0.372 ms | **−94%** | 35 957 → **0** |
+| 140 KB liftable rows *(work happens)* | 8.599 ms | 9.645 ms | +12% | unchanged |
+
+The last row is the honest cost: on a body that *does* compress, the structural
+scan runs once in the engine and once inside the JSON pass, which needs its
+result anyway. 0.4-0.7 ms bought 4.2-23 ms, so the trade is kept and written
+down rather than tuned away. Output is unchanged in both arms by construction —
+every gate condition is a necessary condition of its pass succeeding — and that
+is a test over the whole shape corpus, not a claim.
+
+```sh
+go test ./internal/distill/ -run '^$' -bench Gate -benchtime 50x
+go test ./internal/engine/  -run '^$' -bench 'Shapes|Turns' -benchtime 20x
+```
+
 **Not measured: answer quality against a live model.** Level 2 of the protocol
 (LoCoMo, RULER, BFCL v3 through a real provider, gate Δaccuracy ≤ 2 pp) is
 specified but has not been run. Until it is, squoze makes no claim about task
@@ -141,6 +165,25 @@ import "github.com/Rethinger/squoze"
 eng := squoze.NewEngine(squoze.DefaultMemoCapacity)
 out, res := eng.Apply(requestBody)
 ```
+
+Bounds are optional and measured in bytes:
+
+```go
+eng := squoze.NewEngineWithLimits(squoze.DefaultMemoCapacity, squoze.Limits{
+	MaxBodyBytes:  8 << 20, // skip a body this large without sniffing its format
+	MaxBlockBytes: 2 << 20, // leave one oversized content block alone
+})
+out, res := eng.Apply(requestBody)
+if res.Skipped {
+	log.Printf("squoze skipped: %s", res.SkipReason) // "body_too_large"
+}
+```
+
+A zero `Limits` is v0.3.0 behaviour byte for byte. There is deliberately no
+deadline option: a time budget makes the output depend on how loaded the host
+was, and a body that compresses on an idle box but passes through on a busy one
+breaks the provider prompt cache for every turn after it. Bounds you can reason
+about ahead of the request are sizes.
 
 This is how [2papi](https://github.com/Rethinger/2papi) embeds it as an
 optimization mode.

@@ -5,6 +5,64 @@ dates. The public API surface is [`squoze.go`](squoze.go); on the `0.y.z` line
 the minor bumps for anything a caller can observe, and breaking changes are
 called out explicitly.
 
+## v0.4.0 — 2026-09-05
+
+Work guard and envelope reach. v0.3.0 held its contracts but spent real time
+proving that a body has nothing to compress: on a 560 KB object-of-objects it
+unmarshalled 5.9 MB across 95 274 allocations before answering "no". This
+release answers the same question from the raw bytes, and widens the one
+transform that was reachable only through four hard-coded key names.
+
+Additive API: `NewEngine`, `Apply` and `Process` keep their signatures and their
+output. `Limits`, `NewEngineWithLimits`, `Engine.Limits()`, `Result.Skipped`,
+`Result.SkipReason` and `SkipBodyTooLarge` are new; a zero `Limits` is v0.3.0
+behaviour byte for byte, which is tested over the whole shape corpus rather than
+asserted (`TestZeroLimitsMatchDefaultEngine`).
+
+### Added
+
+- **`Limits` — bounds on the work one `Apply` may do, in bytes.**
+  `MaxBodyBytes` skips a body before its format is sniffed (`wire.Detect`
+  unmarshals into a probe struct, so it walks every byte); `MaxBlockBytes` leaves
+  one oversized content block alone; `MinBlockBytes` raises the built-in 64-byte
+  floor and can never lower it. Bounds are sizes and never durations on purpose:
+  a wall-clock deadline would make the output depend on host load, and a request
+  that compresses on an idle box but passes through on a busy one breaks every
+  provider prompt cache downstream. A capped body reports `Skipped` with
+  `SkipReason: "body_too_large"` and returns its input byte for byte, rather than
+  reporting savings of zero and hiding the reason.
+- **Structural pre-scan before the expensive passes.** `distillJSON` now decides
+  from the raw bytes whether either JSON transform can apply, and the engine runs
+  the same question across all four passes before touching a block. Measured on
+  `golang:1.22`: 140 KB object-of-objects 5.077 ms → 0.847 ms (−83%), 560 KB
+  26.371 ms → 3.115 ms (−88%), 140 KB scalar series 6.197 ms → 0.372 ms (−94%),
+  and allocations on all three go to exactly zero. Small bodies gain most in
+  relative terms — a few hundred bytes of prose costs 13.06 µs → 6.59 µs.
+  Every gate condition is a *necessary* condition of its pass succeeding, so the
+  gate can only remove work whose outcome was already fixed; output neutrality is
+  proven by running the corpus with the gate on and off and requiring byte
+  equality (`TestPrescanIsOutputNeutral`).
+- **Benchmarks live in the repo, not in a scratch harness.**
+  `BenchmarkDistillJSONGate` (gate on/off at the level where the switch exists)
+  and `BenchmarkShapes`/`BenchmarkTurns` (11 shapes, 60 and 300 turns), both with
+  their reproduce command in the doc comment.
+
+### Fixed
+
+- **Tabular lifting reaches arrays it could not name.** v0.3.0 searched four
+  hard-coded wrapper keys (`items`, `data`, `results`, `records`), so the same
+  payload under `rows`, `matches`, `entries`, `hits`, `choices` or `logs` — or
+  one level deeper at `result.rows` — was left uncompressed. The array is now
+  found by structure (depth ≤ 2, deterministic tie-break), which covers the
+  known names and the unknown ones at the same cost.
+- **Lifting is declined when it would drop an envelope field.** The wider search
+  finds more arrays, and some of them sit next to scalars that neither the table
+  nor its headline would carry. `liftIsLossless` + `siblingsAccountedFor` refuse
+  those: a model shown 800 rows with `has_more` silently dropped cannot tell that
+  more pages exist.
+- **Envelope fields are read from the array's parent, not from the root**, so a
+  depth-2 path discloses `total_count`/`has_more` the same way depth 1 does.
+
 ## v0.3.0 — 2026-09-05
 
 Contract repair. The benchmark audit in the 2papi gateway
