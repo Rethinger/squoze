@@ -195,6 +195,11 @@ func (e *Engine) distillText(f profile.Family, s string) string {
 		}
 		// If below profile.MinBytes (e.g. Claude ~2.7KB), pass through untouched
 		return ""
+	case router.KindCode:
+		// Never-touch, and that has to mean before Pass 4 as well: terminal
+		// hygiene would rewrite bytes inside a source file the caller is
+		// about to compile or diff.
+		return ""
 	}
 
 	// Pass 4: Generic terminal hygiene for logs/noise

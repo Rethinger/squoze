@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"sort"
-	"strings"
 
 	"github.com/Rethinger/squoze/internal/distill"
 	"github.com/Rethinger/squoze/internal/profile"
@@ -21,8 +20,16 @@ type toolTarget struct {
 	turnIndex  int
 	startIndex int
 	rawLen     int
-	content    string
-	isUser     bool
+	// content is the working value: what the distillers see. Cross-turn dedup
+	// rewrites it in place before distillation runs.
+	content string
+	// orig is what actually sits in the request body. Change detection must
+	// compare against this, never against content: dedup mutates content, so
+	// `out != content` compares a value with itself and silently discards the
+	// dedup replacement — which resends the earlier turn in full and kills the
+	// provider's prompt-cache prefix.
+	orig   string
+	isUser bool
 }
 
 // applyReplacements stitches original body and replacement slices into a new buffer.
@@ -74,6 +81,7 @@ func (e *Engine) processOpenAIChatFast(f profile.Family, body []byte, res Result
 				startIndex: c.Index,
 				rawLen:     len(c.Raw),
 				content:    c.String(),
+				orig:       c.String(),
 				isUser:     role == "user",
 			})
 		}
@@ -117,11 +125,14 @@ func (e *Engine) processOpenAIChatFast(f profile.Family, body []byte, res Result
 			}
 		} else {
 			out = e.distillText(f, t.content)
-			if out == "" && strings.Contains(t.content, "[... squoze: earlier view") {
-				out = t.content // dedup reference marker
+			if out == "" {
+				// Nothing distilled. content may still differ from orig, because
+				// cross-turn dedup replaced it with a short reference marker that
+				// is below distillText's 64-byte floor.
+				out = t.content
 			}
 		}
-		if out != "" && out != t.content {
+		if out != "" && out != t.orig {
 			rawJSON, err := json.Marshal(out)
 			if err == nil {
 				reps = append(reps, replacement{
@@ -171,6 +182,7 @@ func (e *Engine) processAnthropicFast(f profile.Family, body []byte, res Result)
 					startIndex: inner.Index,
 					rawLen:     len(inner.Raw),
 					content:    inner.String(),
+					orig:       inner.String(),
 				})
 			case inner.IsArray():
 				inner.ForEach(func(_, item gjson.Result) bool {
@@ -184,6 +196,7 @@ func (e *Engine) processAnthropicFast(f profile.Family, body []byte, res Result)
 							startIndex: t.Index,
 							rawLen:     len(t.Raw),
 							content:    t.String(),
+							orig:       t.String(),
 						})
 					}
 					return true
@@ -221,10 +234,13 @@ func (e *Engine) processAnthropicFast(f profile.Family, body []byte, res Result)
 	for _, t := range targets {
 		before := e.memo.Len()
 		out := e.distillText(f, t.content)
-		if out == "" && strings.Contains(t.content, "[... squoze: earlier view") {
-			out = t.content // dedup reference marker
+		if out == "" {
+			// See the OpenAI path: content may be a dedup marker below the
+			// distillation floor, so fall back to it and let the orig
+			// comparison below decide whether anything actually changed.
+			out = t.content
 		}
-		if out != "" {
+		if out != "" && out != t.orig {
 			rawJSON, err := json.Marshal(out)
 			if err == nil {
 				reps = append(reps, replacement{
