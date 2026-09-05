@@ -37,12 +37,23 @@ func TestDistillJSON_TabularLifting(t *testing.T) {
 		t.Fatal("expected DistillJSON to report changed=true")
 	}
 
-	// 1. Must be lifted into a Markdown table
-	if !strings.Contains(distilled, "[... squoze table: 10 rows ...]") {
+	// 1. Must be lifted into a Markdown table. Matched on the prefix, not the
+	// whole headline: the headline is an open-ended list of facts about the
+	// table (envelope fields, hoisted constants, truncation counts), so pinning
+	// it verbatim fails on every addition without any of them being wrong.
+	if !strings.Contains(distilled, "[... squoze table: 10 rows") {
 		t.Fatalf("expected squoze table marker, got:\n%s", distilled)
 	}
 	if !strings.Contains(distilled, "| id |") || !strings.Contains(distilled, "| name |") {
 		t.Fatalf("table headers missing:\n%s", distilled)
+	}
+
+	// status and cluster hold one value across all 10 rows, so they belong in
+	// the headline rather than in 10 identical cells.
+	for _, want := range []string{"all rows: status=RUNNING", "all rows: cluster=us-east-prod-1"} {
+		if !strings.Contains(distilled, want) {
+			t.Errorf("constant column not hoisted (%s):\n%s", want, distilled)
+		}
 	}
 
 	// 2. Metadata trace_id must be stripped
