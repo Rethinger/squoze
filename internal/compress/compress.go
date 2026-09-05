@@ -2,7 +2,10 @@
 // of verbose machine output, under the quality contracts.
 //
 // Contracts enforced here:
-//   - never-elide: lines that look like failures/errors survive the middle cut
+//   - never-elide: lines that look like failures/errors survive the middle cut,
+//     up to Params.MaxKept. Past the cap the marker discloses how many failure
+//     lines were dropped — silent loss of failure signal is the one outcome
+//     this package must never produce
 //   - idempotency: an already-elided blob is never compressed again (provider
 //     prompt caches see a stable body across turns)
 //   - savings floor: if the squeeze saves less than 10%, skip it — breaking
@@ -86,9 +89,18 @@ func Text(s string, p Params) (string, bool) {
 	middle := lines[p.HeadLines : len(lines)-p.TailLines]
 
 	kept := make([]string, 0, p.MaxKept)
+	// dropped counts failure lines the cap refused. The scan must not stop at
+	// the cap: a reader who is told "50 failures kept" and nothing else has no
+	// way to know whether 50 or 500 failed, and never-elide promises failure
+	// signal survives. We cannot keep them all without paying for the tokens
+	// the cap exists to save, so we disclose the count instead.
+	dropped := 0
 	for idx := 0; idx < len(middle); idx++ {
 		if len(kept) >= p.MaxKept {
-			break
+			if mustKeep(middle[idx]) {
+				dropped++
+			}
+			continue
 		}
 		if mustKeep(middle[idx]) {
 			// Rescue the error line plus its immediate context: the detail
@@ -111,6 +123,18 @@ func Text(s string, p Params) (string, bool) {
 	marker := p.Marker
 	marker = strings.ReplaceAll(marker, "%d", itoa(len(middle)-len(kept)))
 	marker = strings.ReplaceAll(marker, "%s", refOf(s))
+	if dropped > 0 {
+		// Built as a suffix rather than a third verb in the template: the
+		// substitution above is ReplaceAll over "%d", so any new %d in
+		// Params.Marker would be overwritten by the elided-line count.
+		note := "· " + itoa(dropped) + " more failure lines over cap=" +
+			itoa(p.MaxKept) + ", see local copy"
+		if tail, ok := strings.CutSuffix(marker, "...]"); ok {
+			marker = tail + note + " ...]"
+		} else {
+			marker += " " + note
+		}
+	}
 
 	out := strings.Join(head, "\n") + "\n" + marker + "\n"
 	out += strings.Join(kept, "\n")
